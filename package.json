@@ -1,0 +1,21 @@
+{
+    "name": "tpack-assets",
+    "version": "1.0.0",
+    "description": "提供静态资源处理支持",
+    "repository": {
+        "type": "git",
+        "url": "git+ssh://git@github.com/tpack/tpack-assets.git"
+    },
+    "bugs": {
+        "url": "https://github.com/tpack/tpack-assets/issues",
+        "email": "xuld@vip.qq.com"
+    },
+    "author": {
+        "name": "xuld",
+        "email": "xuld@vip.qq.com"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "tpack": "*"
+    }
+}
