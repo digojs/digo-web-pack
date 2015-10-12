@@ -1,13 +1,13 @@
 {
-    "name": "tpack-assets",
+    "name": "tpack-rename",
     "version": "1.0.0",
-    "description": "提供静态资源处理支持",
+    "description": "提供重命名支持",
     "repository": {
         "type": "git",
-        "url": "git+ssh://git@github.com/tpack/tpack-assets.git"
+        "url": "git+ssh://git@github.com/tpack/tpack-rename.git"
     },
     "bugs": {
-        "url": "https://github.com/tpack/tpack-assets/issues",
+        "url": "https://github.com/tpack/tpack-rename/issues",
         "email": "xuld@vip.qq.com"
     },
     "author": {
