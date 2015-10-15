@@ -1,13 +1,13 @@
 {
-    "name": "tpack-rename",
-    "version": "1.0.0",
-    "description": "Ìá¹©ÖØÃüÃûÖ§³Ö",
+    "name": "tpack-assets",
+    "version": "1.0.1",
+    "description": "æä¾›é‡å‘½åæ”¯æŒ",
     "repository": {
         "type": "git",
-        "url": "git+ssh://git@github.com/tpack/tpack-rename.git"
+        "url": "git+ssh://git@github.com/tpack/tpack-assets.git"
     },
     "bugs": {
-        "url": "https://github.com/tpack/tpack-rename/issues",
+        "url": "https://github.com/tpack/tpack-assets/issues",
         "email": "xuld@vip.qq.com"
     },
     "author": {
