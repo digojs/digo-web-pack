@@ -36,6 +36,10 @@ exports.text = function (file, options, builder) {
 	return formatProcessed(file._assetsProcessed = processUrl(file.content, file, options, builder), file);
 };
 
+exports.require = function (file, options, builder) {
+	return formatProcessed(file._assetsProcessed = processRequire(file.content, file, options, builder), file);
+};
+
 function getAttr(html, attrName) {
 	var re = new RegExp('\\s' + attrName + '\\s*(=\\s*([\'"])([\\s\\S]*?)\\2)?', 'i');
 	var match = re.exec(html);
@@ -190,10 +194,10 @@ function processDependency(baseFile, relativeUrl, options, builder, returnConten
 		newRelativeUrl = Path.relative(staticPath, relativeFile.destFullPath);
 		
 		// 如果当前路径在 CDN 外，则不采用 CDN 地址。
-		newRelativeUrl = /^\.\./.test(newRelativeUrl) ? '<<<file:///' + relativeFile.destFullPath + '>>>' : Path.join(options.staticUrl, newRelativeUrl).replace(/\\/g, '/');
+		newRelativeUrl = /^\.\./.test(newRelativeUrl) ? '<<<file:///' + relativeFile.destPath + '>>>' : Path.join(options.staticUrl, newRelativeUrl).replace(/\\/g, '/');
 
 	} else {
-		newRelativeUrl = '<<<file:///' + relativeFile.destFullPath + '>>>';
+		newRelativeUrl = '<<<file:///' + relativeFile.destPath + '>>>';
 	}
 	
 	// 追加后缀。
@@ -227,7 +231,7 @@ function processUrl(content, file, options, builder) {
 }
 
 /**
- * 将 CSS 文件中的路径部分转为绝对地址。如 <<<file:///E:/work/a.txt>>>
+ * 将 CSS 文件中的路径部分转为项目路径。如 <<<file:///a.txt>>>
  * @param {} file 
  * @param {} options 
  * @param {} builder 
@@ -251,7 +255,7 @@ function processCss(file, options, builder) {
 }
 
 /**
- * 将 JS 文件中的路径部分转为绝对地址。如 <<<file:///E:/work/a.txt>>>
+ * 将 JS 文件中的路径部分转为项目路径。如 <<<file:///a.txt>>>
  * @param {} file 
  * @param {} options 
  * @param {} builder 
@@ -267,7 +271,7 @@ function processInlined(baseFile, content, ext, builder) {
 }
 
 /**
- * 将 HTML 文件中的路径部分转为绝对地址。如 <<<file:///E:/work/a.txt>>>
+ * 将 HTML 文件中的路径部分转为项目路径。如 <<<file:///a.txt>>>
  * @param {} file 
  * @param {} options 
  * @param {} builder 
@@ -303,15 +307,15 @@ function processHtml(file, options, builder) {
 		
 		all = prefix + content + postfix;
 		
-		// <... __src="">
-		var outerSrc = getAttr(tags, "__src");
+		// <... __dest="">
+		var outerSrc = getAttr(tags, "__dest");
 		if (outerSrc && !/:|^\/\//.test(outerSrc)) {
 			
 			// 拆分路径的 ? 后的部分。
 			var urlParts = parseUrl(outerSrc);
 			
 			// 添加为文件并替换为路径。
-			var src = "<<<file:///" + builder.addFile(file.resolvePath(urlParts.path), content).destFullPath + ">>>" + urlParts.query;
+			var src = "<<<file:///" + builder.addFile(file.resolvePath(urlParts.path), content).destPath + ">>>" + urlParts.query;
 			
 			all = removeAttr(styleOrScript.length < 5 ?
 				setAttr(setAttr('<link' + prefix.substr('<style'.length), 'rel', 'stylesheet'), 'href', src):
@@ -365,6 +369,13 @@ function processHtml(file, options, builder) {
 	
 	});
 	
+}
+
+function processRequire(file, options, builder) {
+    
+
+
+
 }
 
 function formatProcessed(processedText, file) {
