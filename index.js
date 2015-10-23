@@ -36,10 +36,6 @@ exports.text = function (file, options, builder) {
 	return formatProcessed(file._assetsProcessed = processUrl(file.content, file, options, builder), file);
 };
 
-exports.require = function (file, options, builder) {
-	return formatProcessed(file._assetsProcessed = processRequire(file.content, file, options, builder), file);
-};
-
 function getAttr(html, attrName) {
 	var re = new RegExp('\\s' + attrName + '\\s*(=\\s*([\'"])([\\s\\S]*?)\\2)?', 'i');
 	var match = re.exec(html);
@@ -111,6 +107,26 @@ function getMimeType(mimeTypes, ext) {
 	return 'application/x-' + ext.slice(1);
 };
 
+function getExtByMimeType(mimeTypes, mimeType) {
+    
+    for (var ext in mimeTypes) {
+        if (mimeTypes[ext] === mimeType) {
+            return ext;
+        }
+    }
+    
+    var serverConfigs = require('aspserver/configs');
+    if (serverConfigs.mimeTypes) {
+        for (var ext in serverConfigs.mimeTypes) {
+            if (serverConfigs.mimeTypes[ext] === mimeType) {
+                return ext;
+            }
+        }
+    }
+
+    return '.' + mimeType.replace(/^.*\//, '');
+};
+
 function parseUrl(url) {
 	var result = /^(.*)([\?&].*)$/.exec(url);
 	return result ? { path: result[1], query: result[2] } : { path: url, query: '' };
@@ -146,11 +162,16 @@ function processDependency(baseFile, relativeUrl, options, builder, returnConten
 		
 		// 仅支持 http(s) 协议地址内联。
 		if (isInline && /^https?:/i.test(url)) {
-			var buffer = request(url);
-			return returnContentIfInline ? {
-				inline: true,
-				content: buffer.toString(builder.encoding)
-			} : getBase64Url(buffer, urlParts.path, options.mimeTypes);
+            var buffer = request(url);
+
+            var limit = +(/\b__inline\s*=\s*(\d+)/.exec(url) || 0)[1];
+            if (!limit || buffer.length < limit) {
+                return returnContentIfInline ? {
+                    inline: true,
+                    content: buffer.toString(builder.encoding)
+                } : getBase64Url(buffer, urlParts.path, options.mimeTypes);
+            }
+			
 		}
 		
 		// 不内联的绝对路径不处理。
@@ -174,13 +195,16 @@ function processDependency(baseFile, relativeUrl, options, builder, returnConten
 	}
 	
 	// 内联。
-	if (isInline) {
-		return returnContentIfInline ? {
-			inline: true,
-			// 优先获取匹配的模板，以方便二次重定向之后更换位置。
-			content: relativeFile._assetsProcessed || relativeFile.content
-		} : getBase64Url(relativeFile.buffer, relativeFile.destPath, options.mimeTypes);
-	}
+    if (isInline) {
+        var limit = +(/\b__inline\s*=\s*(\d+)/.exec(url) || 0)[1];
+        if (!limit || buffer.length < limit) {
+            return returnContentIfInline ? {
+                inline: true,
+                // 优先获取匹配的模板，以方便二次重定向之后更换位置。
+                content: relativeFile._assetsProcessed || relativeFile.content
+            } : getBase64Url(relativeFile.buffer, relativeFile.destPath, options.mimeTypes);
+        }
+    }
 	
 	var newRelativeUrl;
 	
@@ -194,10 +218,10 @@ function processDependency(baseFile, relativeUrl, options, builder, returnConten
 		newRelativeUrl = Path.relative(staticPath, relativeFile.destFullPath);
 		
 		// 如果当前路径在 CDN 外，则不采用 CDN 地址。
-		newRelativeUrl = /^\.\./.test(newRelativeUrl) ? '<<<file:///' + relativeFile.destPath + '>>>' : Path.join(options.staticUrl, newRelativeUrl).replace(/\\/g, '/');
+		newRelativeUrl = /^\.\./.test(newRelativeUrl) ? '<<<path:///' + relativeFile.destPath + '>>>' : Path.join(options.staticUrl, newRelativeUrl).replace(/\\/g, '/');
 
 	} else {
-		newRelativeUrl = '<<<file:///' + relativeFile.destPath + '>>>';
+		newRelativeUrl = '<<<path:///' + relativeFile.destPath + '>>>';
 	}
 	
 	// 追加后缀。
@@ -214,6 +238,10 @@ function processDependency(baseFile, relativeUrl, options, builder, returnConten
 					return new Date().format("yyyyMMddHHmmss");
 				case "md5":
 					return getMd5(relativeFile.buffer);
+                case "md5h":
+                    return getMd5(relativeFile.buffer).substr(0, 16);
+                case "md5s":
+                    return getMd5(file.buffer).substr(0, 6);
 			}
 			return all;
 		});
@@ -231,7 +259,7 @@ function processUrl(content, file, options, builder) {
 }
 
 /**
- * 将 CSS 文件中的路径部分转为项目路径。如 <<<file:///a.txt>>>
+ * 将 CSS 文件中的路径部分转为项目路径。如 <<<path:///a.txt>>>
  * @param {} file 
  * @param {} options 
  * @param {} builder 
@@ -255,7 +283,7 @@ function processCss(file, options, builder) {
 }
 
 /**
- * 将 JS 文件中的路径部分转为项目路径。如 <<<file:///a.txt>>>
+ * 将 JS 文件中的路径部分转为项目路径。如 <<<path:///a.txt>>>
  * @param {} file 
  * @param {} options 
  * @param {} builder 
@@ -266,12 +294,12 @@ function processJs(file, options, builder) {
 }
 
 function processInlined(baseFile, content, ext, builder) {
-	var result = builder.processDependency(baseFile, baseFile.srcPath + "#inline." + ext, content);
+	var result = builder.processDependency(baseFile, baseFile.srcPath + "#inline" + ext, content);
 	return result._assetsProcessed || result.content;
 }
 
 /**
- * 将 HTML 文件中的路径部分转为项目路径。如 <<<file:///a.txt>>>
+ * 将 HTML 文件中的路径部分转为项目路径。如 <<<path:///a.txt>>>
  * @param {} file 
  * @param {} options 
  * @param {} builder 
@@ -287,7 +315,7 @@ function processHtml(file, options, builder) {
 		
 		// <style>
 		if (styleOrScript.length < 5) {
-			content = processInlined(file, content, type && type !== "text/css" ? type : 'css' , builder);
+			content = processInlined(file, content, type && type !== "text/css" ? getExtByMimeType(options.mimeTypes, type) : '.css' , builder);
 		} else {
 			// <script src>
 			var src = getAttr(tags, "src");
@@ -301,7 +329,7 @@ function processHtml(file, options, builder) {
 				}
 			// <script>
 			} else {
-				content = processInlined(file, content, type && type !== "text/javascript" ? type : 'js', builder);
+				content = processInlined(file, content, type && type !== "text/javascript" ?  getExtByMimeType(options.mimeTypes, type) : '.js', builder);
 			}
 		}
 		
@@ -315,11 +343,11 @@ function processHtml(file, options, builder) {
 			var urlParts = parseUrl(outerSrc);
 			
 			// 添加为文件并替换为路径。
-			var src = "<<<file:///" + builder.addFile(file.resolvePath(urlParts.path), content).destPath + ">>>" + urlParts.query;
+			var src = "<<<path:///" + builder.addFile(file.resolvePath(urlParts.path), content).destPath + ">>>" + urlParts.query;
 			
 			all = removeAttr(styleOrScript.length < 5 ?
 				setAttr(setAttr('<link' + prefix.substr('<style'.length), 'rel', 'stylesheet'), 'href', src):
-				setAttr(prefix, 'src', src), "__src");
+				setAttr(prefix, 'src', src), "__dest");
 		}
 		
 		return all;
@@ -371,15 +399,8 @@ function processHtml(file, options, builder) {
 	
 }
 
-function processRequire(file, options, builder) {
-    
-
-
-
-}
-
 function formatProcessed(processedText, file) {
-	return processedText.replace(/<<<file:\/\/\/(.*?)>>>/g, function (all, fullPath) {
+	return processedText.replace(/<<<path:\/\/\/(.*?)>>>/g, function (all, fullPath) {
 		return file.relativePath(fullPath);
 	});
 }
