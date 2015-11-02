@@ -26,3 +26,7 @@
         ]
     });
 
+## 支持的配置
+
+#### resolveComments 
+是否解析注释内的 #include 等指令。（默认：true）
