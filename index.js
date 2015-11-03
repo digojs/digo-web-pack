@@ -274,8 +274,8 @@ function resolveJsModule(module, options, builder) {
 
     // 为避免注释干扰，首先将注释删除。
     var removedSegments = [];
-    module.content = module.content.replace(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*?(\r|\n|$)|'[^']*'|"[^"]*"/g, function (all) {
-        if (all[0] === '/' && /\b(require|define)\b/.test(all)) {
+    module.content = module.content.replace(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*?(\r|\n|$)/g, function (all) {
+        if (all[0] === '/' && /\b(require)\b/.test(all)) {
             var id = removedSegments.length;
             removedSegments[id] = all;
             return '/*_comment:' + id + '*/';
@@ -286,15 +286,15 @@ function resolveJsModule(module, options, builder) {
     // 解析 CommonJs：require("xxx")
     if (options.resolveCommonJsRequires !== false) {
         module.content = module.content.replace(/\brequire\s*\(\s*('([^']*?)'|"([^"]*?)")\s*\)/g, function (all, param, url, url2) {
-            return 'require(' + param[0] + parseCommonJsRequire(url || url2, module, options, builder) + param[0] + ')';
+            return 'require(' + JSON.stringify(parseCommonJsRequire(url || url2, module, options, builder)) + ')';
         });
     }
 
     // 解析 AsyncRequire：require(["xxx"], function(){ ... })
     if (options.resolveAsyncRequires !== false) {
-        module.content = module.content.replace(/\brequire\s*\([\s\S]*?\,\s*function\b/g, function (all, content) {
-            return all.replace(/('([^']*?)'|"([^"]*?)")/g, function (all, url, url2) {
-                return all[0] + parseAsyncRequire(url || url2, module, options, builder) + all[0];
+        module.content = module.content.replace(/\brequire\s*\(\s*\[\s*(('[^']*?'|"[^"]*?")(\s*,\s*('[^']*?'|"[^"]*?")?)*)\s*\]\s*\,\s*function\b/g, function (all, content) {
+            return all.replace(/'([^']*?)'|"([^"]*?)"/g, function (all, url, url2) {
+                return JSON.stringify(parseAsyncRequire(url || url2, module, options, builder));
             });
         });
     }
@@ -331,11 +331,11 @@ function parseCommonJsRequire(url, module, options, builder) {
     // 解析位置。
     var urlObj = requireResolveUrl(url, module, options, builder);
     if (urlObj.isUrl) {
-        return;
+        return url;
     }
     if (urlObj.notFound) {
         builder.warn('{0}: Cannot find module "{1}"', module.path, url);
-        return;
+        return url;
     }
 
     // 解析目标模块。
@@ -446,7 +446,7 @@ function packJsModule(module, options) {
     // 添加统一尾。
     switch (module.buildType) {
         case "global":
-            return result + "\r\n__tpack__.require(\"" + module.name + "\");";
+            return result + '\r\n__tpack__.require(' + JSON.stringify(module.name) + ');';
         case "umd":
             return getSourceCode(function () {
                 BODY;
@@ -457,26 +457,26 @@ function packJsModule(module, options) {
                 } else {
                     __tpack__.require(0);
                 }
-            }).replace("BODY;", result).replace(/0/g, '"' + module.name + '"');
+            }).replace("BODY;", result).replace(/0/g, JSON.stringify(module.name));
         case "amd":
             return getSourceCode(function () {
                 BODY;
                 define([], function () {
                     return __tpack__.require(0);
                 });
-            }).replace("BODY;", result).replace('0', '"' + module.name + '"');
+            }).replace("BODY;", result).replace('0', JSON.stringify(module.name));
         case "cmd":
             return getSourceCode(function () {
                 BODY;
                 define(function (exports, module, require) {
                     module.exports = __tpack__.require(0);
                 });
-            }).replace("BODY;", result).replace('0', '"' + module.name + '"');
+            }).replace("BODY;", result).replace('0', JSON.stringify(module.name));
         default:
             return getSourceCode(function () {
                 BODY;
                 module.exports = __tpack__.require(0);
-            }).replace("BODY;", result).replace('0', '"' + module.name + '"');
+            }).replace("BODY;", result).replace('0', JSON.stringify(module.name));
     }
 }
 
@@ -1007,7 +1007,7 @@ function parseModuleType(type, module, options, builder) {
  */
 function parseInlined(content, ext, module, options, builder) {
     // 创建虚拟文件并进行处理。
-    var file = builder.createFile(module.name + "#inline" + ext, content);
+    var file = builder.createFile(module.name + "#inline" + (module._inlineCounter = (module._inlineCounter + 1) || 0) + ext, content);
     // 按正常逻辑处理文件，然后强制执行当前模块。
     builder.processFile(file) && exports(file, options, builder);
     return file.content;
@@ -1077,7 +1077,7 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
 
     // 自主导入地址。
     if (options.importer) {
-        url = options.importer(url, module.file, options, builder, requireMode);
+        url = options.importer(url, module.file, options, builder, requireMode) || url;
     }
 
     // 已经是网络地址。
@@ -1094,6 +1094,7 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
     // 拆开 ? 前后
     var urlObj = splitUrl(url);
 
+    // 已经是绝对地址。
     if (/^\./.test(urlObj.path)) {
 
         // . 开头表示相对路径。
@@ -1103,6 +1104,11 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
 
         // / 开头表示绝对地址。
         paths.push(Path.resolve((options.rootPath || builder.srcPath) + urlObj.path));
+
+    } else if (Path.isAbsolute(urlObj.path)) {
+
+        // 其它绝对路径 E:/a。
+        paths.push(urlObj.path);
 
     } else {
 
