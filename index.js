@@ -251,6 +251,10 @@ function encodeHTMLAttribute(str) {
  * @param {Builder} builder 当前正在使用的构建器。
  */
 function resolveJsModule(module, options, builder) {
+    
+    if(module.path.indexOf("Danger.js") >=0) {
+        debugger
+    }
 
     module.type = 'js';
 
@@ -266,7 +270,7 @@ function resolveJsModule(module, options, builder) {
                 return parseExclude(macroArgs, module, options, builder);
             }
             if (macroName === "moduletype") {
-                return parseModuleType(macroArgs, module, options, builder);
+                return parseModuleType(removeQuotes(macroArgs), module, options, builder);
             }
             return all;
         });
@@ -300,10 +304,31 @@ function resolveJsModule(module, options, builder) {
     }
 
     // 发现 exports 或 module 时自动指定为 commonJs 模块。
-    if (options.resolveCommonJsExports !== false && !module.commonJs && /\b(exports|module)\./.test(module.content)) {
-        module.commonJs = true;
+    if (options.resolveCommonJsExports !== false && !module.flags.commonJs && /\b(exports\.|module\.|process\.|global\.|Buffer|setImmediate\(|clearImmediate\()/.test(module.content)) {
+        module.flags.commonJs = true;
+        module.flags.global = /\bglobal\./.test(module.content);
+        module.flags.process = /\bprocess\./.test(module.content) && module.path !== getNodeNativeModule('process');
+        module.flags.Buffer = /\bBuffer/.test(module.content) && module.path !== getNodeNativeModule('Buffer');
+        module.flags.setImmediate = /\bsetImmediate\(/.test(module.content) && module.path !== getNodeNativeModule('timers');
+        module.flags.clearImmediate = /\bclearImmediate\(/.test(module.content) && module.path !== getNodeNativeModule('timers');
+
     }
 
+    if (module.flags.commonJs) {
+        if (module.flags.process) {
+            module.flags.process = parseCommonJsRequire('process', module, options, builder);
+        }
+        if (module.flags.Buffer) {
+            module.flags.Buffer = parseCommonJsRequire('Buffer', module, options, builder);
+        }
+        if (module.flags.setImmediate) {
+            module.flags.setImmediate = parseCommonJsRequire('timers', module, options, builder);
+        }
+        if (module.flags.clearImmediate) {
+            module.flags.clearImmediate = parseCommonJsRequire('timers', module, options, builder);
+        }
+    }
+    
     // 恢复注释。
     if (removedSegments.length) {
         module.content = module.content.replace(/\/\*_comment:(\d+)\*\//g, function (_, id) {
@@ -326,10 +351,10 @@ function resolveJsModule(module, options, builder) {
  */
 function parseCommonJsRequire(url, module, options, builder) {
 
-    module.commonJs = true;
+    module.flags.commonJs = true;
 
     // 解析位置。
-    var urlObj = requireResolveUrl(url, module, options, builder);
+    var urlObj = requireResolveUrl(url, module, options, builder, true);
     if (urlObj.isUrl) {
         return url;
     }
@@ -355,7 +380,7 @@ function parseCommonJsRequire(url, module, options, builder) {
  * @returns {String} 返回原 require() 占位符。
  */
 function parseAsyncRequire(url, module, options, builder) {
-    module.hasAsyncRequire = true;
+    module.flags.hasAsyncRequire = true;
 
     // 解析位置。
     var urlObj = requireResolveUrl(url, module, options, builder, true);
@@ -379,32 +404,35 @@ function parseAsyncRequire(url, module, options, builder) {
 function packJsModule(module, options) {
 
     // 如果一个文件打包为全局类型且没有依赖项。则保持全局状态。否则都需要添加 统一运行的头。
-    if (module.buildType === "global" && !module.commonJs && !module.hasAsyncRequire) {
+    if ((module.buildType === "module" || module.buildType === "global") && !module.flags.commonJs && !module.flags.hasAsyncRequire) {
+        return module.content;
+    }
+
+    if (module.buildType === "nonmodule") {
         return module.content;
     }
 
     var result = '';
 
     // 只要依赖的任一模块存在异步加载，则必须添加异步加载支持。
-    var hasAsyncRequire = false;
-    var hasStyleLoader = false;
+    var finalFlags = {};
 
     // 遍历模块及其所有依赖项。
     module.walk(function (currentModule) {
+        for (var flag in currentModule.flags) {
+            finalFlags[flag] = finalFlags[flag] || currentModule.flags[flag];
+        }
+
         switch (currentModule.type) {
             case 'js':
-                if (currentModule.hasAsyncRequire) {
-                    hasAsyncRequire = true;
-                }
                 result += '\r\n__tpack__.define(' + JSON.stringify(currentModule.name) + ', function(exports, module, require){\r\n' + currentModule.content + '\r\n});\r\n';
                 break;
             case 'css':
-                hasStyleLoader = true;
                 result += '\r\n__tpack__.insertStyle(' + JSON.stringify(currentModule.content) + ');\r\n';
                 break;
-            default:
+            case "html":
                 // HTML 直接以字符串插入。
-                result += JSON.stringify(currentModule.content);
+                result += '\r\n' + JSON.stringify(currentModule.content) + '\r\n';
                 break;
         }
     });
@@ -418,11 +446,11 @@ function packJsModule(module, options) {
         '\t\t};\r\n' +
         '\t}';
 
-    if (hasStyleLoader) {
+    if (finalFlags.hasStyleLoader) {
 
     }
 
-    if (hasAsyncRequire) {
+    if (finalFlags.hasAsyncRequire) {
 
     }
 
@@ -440,24 +468,41 @@ function packJsModule(module, options) {
 
     header += '\r\n};\r\n';
 
-    // 添加统一头。
     result = header + result;
+
+    if (finalFlags.global) {
+        result += '\r\nthis.global = (function(){return this;)();\r\n';
+    }
+    if (finalFlags.process) {
+        result += '\r\nthis.process = __tpack__.require(' + JSON.stringify(finalFlags.process) + ');\r\n';
+    }
+    if (finalFlags.Buffer) {
+        result += '\r\nthis.Buffer = __tpack__.require(' + JSON.stringify(finalFlags.Buffer) + ');\r\n';
+    }
+    if (finalFlags.setImmediate) {
+        result += '\r\nthis.setImmediate = __tpack__.require(' + JSON.stringify(finalFlags.setImmediate) + ').setImmediate;\r\n';
+    }
+    if (finalFlags.clearImmediate) {
+        result += '\r\nthis.clearImmediate = __tpack__.require(' + JSON.stringify(finalFlags.clearImmediate) + ').clearImmediate;\r\n';
+    }
 
     // 添加统一尾。
     switch (module.buildType) {
+        case "module":
         case "global":
             return result + '\r\n__tpack__.require(' + JSON.stringify(module.name) + ');';
         case "umd":
-            return getSourceCode(function () {
-                BODY;
+            return result + getSourceCode(function () {
                 if (typeof define !== "undefined" && define.amd) {
                     define(function () { return __tpack__.require(0); });
                 } else if (typeof module !== "undefined") {
                     module.exports = __tpack__.require(0);
                 } else {
-                    __tpack__.require(0);
+                    (function (exports, value) {
+                        for (var key in value) exports[key] = value[key];
+                    })(typeof exports === 'object' ? exports : this, __tpack__.require(0));
                 }
-            }).replace("BODY;", result).replace(/0/g, JSON.stringify(module.name));
+            }).replace(/0/g, JSON.stringify(module.name));
         case "amd":
             return getSourceCode(function () {
                 BODY;
@@ -478,6 +523,24 @@ function packJsModule(module, options) {
                 module.exports = __tpack__.require(0);
             }).replace("BODY;", result).replace('0', JSON.stringify(module.name));
     }
+
+
+}
+
+/**
+ * 获取指定路径表示的 node 原生模块。
+ * @param {String} url 原生模块名。 
+ * @returns {} 
+ */
+function getNodeNativeModule(url) {
+    // Thanks to Webpack.
+    var nodeLibsBrowser = require("node-libs-browser");
+
+    if (nodeLibsBrowser[url]) {
+        return nodeLibsBrowser[url];
+    }
+
+    return null;
 }
 
 function getSourceCode(fn) {
@@ -495,6 +558,9 @@ function getSourceCode(fn) {
  * @param {Builder} builder 当前正在使用的构建器。
  */
 function resolveCssModule(module, options, builder) {
+
+    module.type = 'css';
+    module.flags.hasStyleLoader = true;
 
     // @import url(): 内联或重定向。
     if (options.resolveCssUrl !== false) {
@@ -607,6 +673,7 @@ function BuildModule(file) {
     this.included = [];
     this.required = [];
     this.excluded = [];
+    this.flags = { __proto__: null };
 }
 
 BuildModule.prototype = {
@@ -692,7 +759,7 @@ BuildModule.prototype = {
     /**
      * 获取当前模块预设的打包类型。当 type=="js" 时可能的值有："global"、"amd"、"umd"、"cmd"、"commonjs"。
      */
-    buildType: 'global',
+    buildType: "module",
 
     /**
      * 获取当前模块的内容。
@@ -1102,9 +1169,21 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
 
     } else if (/^\//.test(urlObj.path)) {
 
-        // / 开头表示绝对地址。
-        paths.push(Path.resolve((options.rootPath || builder.srcPath) + urlObj.path));
+        var p;
 
+        // 处理虚拟目录。
+        for (var virtualUrl in options.virtualPaths) {
+            if (urlObj.path.toLowerCase().startsWith(virtualUrl.toLowerCase())) {
+                p = Path.join(builder.srcPath, options.virtualPaths[virtualUrl], urlObj.path.substr(virtualUrl.length));
+                break;
+            }
+        }
+
+        if (!p) {
+            p = builder.getPath(urlObj.path.substr(1));
+        }
+
+        paths.push(p);
     } else if (Path.isAbsolute(urlObj.path)) {
 
         // 其它绝对路径 E:/a。
@@ -1115,6 +1194,12 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
         // 直接单词开头可以表示相对路径，也可以表示全局搜索路径。
         if (!requireMode) {
             paths.push(module.resolvePath(urlObj.path));
+        } else {
+            var p = getNodeNativeModule(urlObj.path);
+            if (p) {
+                urlObj.path = p;
+                return urlObj;
+            }
         }
 
         // 全局搜索路径。
@@ -1125,8 +1210,8 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
         }
 
         // node_modules 全局搜索路径。
-        if (requireMode && options.searchNodeModules) {
-            var dir = module.url, p;
+        if (requireMode && options.searchNodeModules !== false) {
+            var dir = module.path, p = null;
             while (p !== dir) {
                 p = dir;
                 dir = Path.dirname(dir);
@@ -1137,7 +1222,7 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
     }
 
     // 解析各种扩展名组合结果。
-    var extensions = Path.extname(urlObj.path) ? null : options.extensions;
+    var extensions = options.extensions;
     for (var i = 0; i < paths.length; i++) {
 
         // 判断未补充扩展名是否存在。
