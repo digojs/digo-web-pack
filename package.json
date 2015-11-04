@@ -1,7 +1,7 @@
 {
     "name": "tpack-assets",
-    "version": "1.0.2",
-    "description": "提供重命名支持",
+    "version": "1.1.0",
+    "description": "TPack 解析文件依赖的插件。",
     "repository": {
         "type": "git",
         "url": "git+ssh://git@github.com/tpack/tpack-assets.git"

@@ -6,7 +6,7 @@ var IO = require('tealweb/io');
 // #region 导出
 
 /**
- * Tpack 解析模块内容的插件。
+ * TPack 解析文件依赖的插件。
  * @param {BuildFile} file 当前正在编译的文件。
  * @param {Object} options 用户设置的传递给当前插件的选项。具体的配置值为：
  * * @property {Boolean} [resolveComments=true] 是否解析注释内的 #include 等指令。
@@ -251,8 +251,8 @@ function encodeHTMLAttribute(str) {
  * @param {Builder} builder 当前正在使用的构建器。
  */
 function resolveJsModule(module, options, builder) {
-    
-    if(module.path.indexOf("Danger.js") >=0) {
+
+    if (module.path.indexOf("Danger.js") >= 0) {
         debugger
     }
 
@@ -328,7 +328,7 @@ function resolveJsModule(module, options, builder) {
             module.flags.clearImmediate = parseCommonJsRequire('timers', module, options, builder);
         }
     }
-    
+
     // 恢复注释。
     if (removedSegments.length) {
         module.content = module.content.replace(/\/\*_comment:(\d+)\*\//g, function (_, id) {
@@ -1162,28 +1162,11 @@ function requireResolveUrl(url, module, options, builder, requireMode) {
     var urlObj = splitUrl(url);
 
     // 已经是绝对地址。
-    if (/^\./.test(urlObj.path)) {
+    if (/^[\.\/]/.test(urlObj.path)) {
 
         // . 开头表示相对路径。
         paths.push(module.resolvePath(urlObj.path));
 
-    } else if (/^\//.test(urlObj.path)) {
-
-        var p;
-
-        // 处理虚拟目录。
-        for (var virtualUrl in options.virtualPaths) {
-            if (urlObj.path.toLowerCase().startsWith(virtualUrl.toLowerCase())) {
-                p = Path.join(builder.srcPath, options.virtualPaths[virtualUrl], urlObj.path.substr(virtualUrl.length));
-                break;
-            }
-        }
-
-        if (!p) {
-            p = builder.getPath(urlObj.path.substr(1));
-        }
-
-        paths.push(p);
     } else if (Path.isAbsolute(urlObj.path)) {
 
         // 其它绝对路径 E:/a。
