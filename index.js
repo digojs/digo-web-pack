@@ -155,12 +155,17 @@ exports.getModuleFromPath = function(path, options, builder) {
 exports.resolveHtmlModule = function(module, options, builder) {
 
     module.type = 'html';
+    
+    // 解析地址。
+    resolveUrls(module, options, builder);
 
+    // 解析 HTML
     module.content = module.content.replace(/(<script\b(?:'[^']*'|"[^"]*|[^>])*>)([\s\S]*?)(<\/script(?:'[^']*'|"[^"]*|[^>])*>|$)|(<style\b(?:'[^']*'|"[^"]*|[^>])*>)([\s\S]*?)(<\/style(?:'[^']*'|"[^"]*|[^>])*>|$)|<(img|embed|audio|video|link|object|source)\b(?:'[^']*'|"[^"]*|[^>])*>|<!--([\s\S]*?)(?:-->|$)/ig, function (all, scriptStart, script, scriptEnd, styleStart, style, styleEnd, tag, comment) {
         
         // <script>
         if (scriptStart) {
             var src = getAttr(scriptStart, "src");
+            var type = getAttr(scriptStart, "type");
             if (src) {
                 var result = parseUrl(src, module, options, builder, true);
                 if (result.inline) {
@@ -170,13 +175,13 @@ exports.resolveHtmlModule = function(module, options, builder) {
                     scriptStart = setAttr(scriptStart, "src", result);
                 }
             } else {
-                content = parseInlined(content, type && type !== "text/javascript" ? builder.getExtByMimeType(type) : '.js', module, options, builder);
+                script = parseInlined(script, type && type !== "text/javascript" ? builder.getExtByMimeType(type) : '.js', module, options, builder);
             }
 
             // 导出。
-            var dest = getAttr(scriptStart, "__dest");
+            var dest = parseDest(scriptStart, script, module, options, builder);
             if (dest) {
-                
+                return setAttr(scriptStart, "src", dest) + scriptEnd;
             }
 
             return scriptStart + script + scriptEnd;
@@ -184,8 +189,15 @@ exports.resolveHtmlModule = function(module, options, builder) {
 
         // <style>
         if (styleStart) {
-            content = parseInlined(content, type && type !== "text/css" ? getExtByMimeType(options, type) : '.css', module, options, builder);
+            var type = getAttr(scriptStart, "type");
+            style = parseInlined(style, type && type !== "text/css" ? builder.getExtByMimeType(type) : '.css', module, options, builder);
             
+            // 导出。
+            var dest = parseDest(styleStart, style, module, options, builder);
+            if (dest) {
+                return setAttr(setAttr('<link' + styleStart.substr('<style'.length), 'rel', 'stylesheet'), 'href', dest);
+            }
+
             return styleStart + style + styleEnd;
         }
 
@@ -195,63 +207,58 @@ exports.resolveHtmlModule = function(module, options, builder) {
             // <link>
             if (/^<link$/i.test(tag)) {
                 var src = getAttr(all, "href");
-                if (src) {
-                    var rel = getAttr(all, "rel");
-                    if (!rel || rel === "stylesheet") {
-                        var result = parseUrl(src, module, options, builder, true);
-                        all = result.inline ? removeAttr(removeAttr('<style' + all.substr("<link".length).replace(/\s*\/>$/, ">"), "rel"), "href") + '\r\n' + result.content + '\r\n</style>' : setAttr(all, "href", result);
-                    } else if (rel === "html") {
-                        var result = parseUrl(src, module, options, builder, true);
-                        all = result.inline ? result.content : setAttr(all, "href", result);
-                    } else {
-                        all = setAttr(all, "href", parseUrl(src, module, options, builder));
-                    }
+                if (!src) {
+                    return all;
                 }
-            } else if (/^<object$/i.test(tag)) {
+                
+                // <link rel="stylesheet">
+                var rel = getAttr(all, "rel");
+                if (!rel || rel === "stylesheet") {
+                    var result = parseUrl(src, module, options, builder, true);
+                    return result.inline ? removeAttr(removeAttr('<style' + all.substr("<link".length).replace(/\s*\/>$/, ">"), "rel"), "href") + '\r\n' + result.content + '\r\n</style>' : setAttr(all, "href", result);
+                } 
+                    
+                // <link rel="html">
+                if (rel === "html") {
+                    var result = parseUrl(src, module, options, builder, true);
+                    return result.inline ? result.content : setAttr(all, "href", result);
+                }
+
+                return setAttr(all, "href", parseUrl(src, module, options, builder));
+            } 
+            
+            // <object$>
+            if (/^<object$/i.test(tag)) {
                 var src = getAttr(all, 'data');
-                if (src) {
-                    all = setAttr(all, "data", parseUrl(src, module, options, builder));
+                if (!src)
+                    return all;
+
+                return setAttr(all, "data", parseUrl(src, module, options, builder));
+            } 
+            
+            // <img>
+            if (/^<img/i.test(tag)) {
+                // http://www.webkit.org/demos/srcset/
+                // <img src="image-src.png" srcset="image-1x.png 1x, image-2x.png 2x, image-3x.png 3x, image-4x.png 4x">
+                var srcset = getAttr(all, "srcset");
+                if (srcset) {
+                    srcset = srcset.replace(/(?:^|,)\s*(.*)\s+\dx\s*(?:,|$)/g, function(src) {
+                        return parseUrl(src, module, options, builder);
+                    });
+                    all = setAttr("srcset", srcset);
                 }
-
-            } else {
-            // <... src>
-                var src = getAttr(all, 'src');
-                if (src) {
-                    all = setAttr(all, "src", parseUrl(src, module, options, builder));
-                }
-
-                src = getAttr(all, 'data-src');
-                if (src) {
-                    all = setAttr(all, "data-src", parseUrl(src, module, options, builder));
-                }
-
-                if (/^<img/i.test(tag)) {
-                    //<img src="image-src.png" srcset="image-1x.png 1x, image-2x.png 2x, image-3x.png 3x, image-4x.png 4x">
-                    //http://www.webkit.org/demos/srcset/
-                    var srcset = getAttr(all, "srcset");
-                    if (srcset) {
-                        
-                    }
-
-                    //m = m.replace(/(\ssrcset\s*=\s*)('[^']+'|"[^"]+"|[^\s\/>]+)/ig, function (m, prefix, value) {
-                    //    var info = fis.util.stringQuote(value);
-                    //    var set = info.rest.split(',');
-                    //    var imgset = [];
-                    //    set.forEach(function (item) {
-                    //        item = item.trim();
-                    //        var p = item.indexOf(' ');
-                    //        if (p == -1) {
-                    //            imgset.push(item);
-                    //            return;
-                    //        }
-                    //        imgset.push(map['uri']['ld'] + item.substr(0, p) + map['uri']['rd'] + item.substr(p));
-                    //    });
-                    //    return prefix + info.quote + imgset.join(', ') + info.quote;
-                    //});
-                }
-
             }
 
+            // <... src>
+            var src = getAttr(all, 'src');
+            if (src) {
+                all = setAttr(all, "src", parseUrl(src, module, options, builder));
+            }
+
+            src = getAttr(all, 'data-src');
+            if (src) {
+                all = setAttr(all, "data-src", parseUrl(src, module, options, builder));
+            }
 
             return all;
         }
@@ -266,50 +273,31 @@ exports.resolveHtmlModule = function(module, options, builder) {
 
     });
 
-    // 解析地址。
-    resolveUrls(module, options, builder);
-
 };
 
 /**
- * 解析文件内的地址。可能为地址内联或追加时间戳。
- * @param {String} url 要处理的相对路径。
- * @param {BuildModule} module 当前正在处理的模块。
- * @param {Object} options 用户设置的传递给当前插件的选项。
- * @param {Builder} builder 当前正在使用的构建器。
- * @param {Boolean} [returnContentIfInline=false] 如果需要转为内联时，@true 表示返回内容，@false 表示返回 base64 编码。
- * @return {String|Object} 返回文件新地址，或者返回文件信息。
+ * 处理 __dest 指令。
+ * @param {} startTag 
+ * @param {} module 
+ * @param {} options 
+ * @param {} builder 
+ * @returns {} 
  */
-function parseUrl(url, module, options, builder, returnContentIfInline) {
-
-    // 解析位置。
-    var urlObj = exports.requireResolveUrl(url, module, options, builder);
-    if (urlObj.isUrl) {
-        return url;
-    }
-    if (urlObj.notFound) {
-        builder.warn("{0}: Reference Not Found: '{1}'", module.name, url);
-        return url;
+function parseDest(startTag, content, module, options, builder) {
+    if (options.inline === false) {
+        return;
     }
 
-    // 获取对应的文件。
-    var file = getFileFromPath(urlObj.path, builder);
-    
-    // 处理内联。
-    var inlineLimit = options.inline === false ? 0 :
-        options.inline === true ? -1 :
-        typeof options.inline === "function" ? options.inline(file.name, file) ? -1 : 0 :
-        typeof options.inline === "number" ? options.inline :
-        /\b__inline\b/.test(urlObj.query) ? +(/\b__inline\s*=\s*(\d+)/.exec(urlObj.query) || [0, -1])[1] : 0;
-
-    if (inlineLimit !== 0 && (inlineLimit < 0 || file.buffer.length < inlineLimit)) {
-        return returnContentIfInline ? {
-            inline: true,
-            content: module.include(file)
-        } : file.getBase64Url();
+    var dest = getAttr(startTag, "__dest");
+    if (!dest || isUrl(dest)) {
+        return;
     }
 
-    return buildUrl(file, urlObj.query, options);
+    var urlObj = splitUrl(dest);
+    var name = builder.getName(module.resolveUrl(urlObj.path));
+    var file = builder.getFile(name) || builder.addFile(name, "");
+    file.content += content;
+    return file.destName + urlObj.query;
 }
 
 /**
@@ -501,7 +489,7 @@ function parseAsyncRequire(url, module, options, builder) {
     module.flags.hasAsyncRequire = true;
 
     // 解析位置。
-    var urlObj = requireResolveUrl(url, module, options, builder, true);
+    var urlObj = exports.requireResolveUrl(url, module, options, builder, true);
     if (urlObj.isUrl) {
         return url;
     }
@@ -668,14 +656,14 @@ function getNodeNativeModule(url) {
  * @param {Object} options 用户设置的传递给当前插件的选项。
  * @param {Builder} builder 当前正在使用的构建器。
  */
-function resolveCssModule(module, options, builder) {
+exports.resolveCssModule = function(module, options, builder) {
 
     module.type = 'css';
     module.flags.hasStyleLoader = true;
 
     // @import url(): 内联或重定向。
     if (options.resolveCssUrl !== false) {
-        module.content = module.content.replace(/((@import\s+)?url\(\s*(['"]?))(.*?)(\3\s*\))/, function (all, prefix, atImport, q, url, postfix) {
+        module.content = module.content.replace(/((@import\s+)?url\(\s*(['"]?))(.*?)(\3\s*\))/, function(all, prefix, atImport, q, url, postfix) {
 
             // 内联 CSS。
             if (atImport) {
@@ -691,7 +679,7 @@ function resolveCssModule(module, options, builder) {
 
     resolveUrls(module, options, builder);
 
-}
+};
 
 // #endregion
 
@@ -729,9 +717,9 @@ exports.resolveResourceModule = function(module, options, builder) {
  */
 function BuildModule(file) {
     this.file = file;
-    this.included = [];
     this.required = [];
     this.excluded = [];
+    this.included = [];
     this.flags = { __proto__: null };
 }
 
@@ -742,19 +730,21 @@ BuildModule.prototype = {
 
     /**
      * 获取当前模块对应的文件。
+     * @type {BuildFile}
      */
     file: null,
 
     /**
      * 获取当前模块的路径。
+     * @type {String}
      */
     get path() {
         return this.file.srcPath;
     },
 
     /**
-     * 获取当前模块的友好名称。
-     * @returns {String} 如果是本地模块则返回文件名称，否则返回完整网址。
+     * 获取当前模块的友好名称。如果是本地模块则返回文件名称，否则返回完整网址。
+     * @type {String}
      */
     get name() {
         return this._name || this.file.srcName;
@@ -783,53 +773,42 @@ BuildModule.prototype = {
         return this.file.resolvePath(url);
     },
 
-    /**
-     * 创建指定从当前模块访问文件的占位符。
-     */
-    createPathPlaceholder: function (file, query, options) {
-        var urlPostfix = options.urlPostfix;
-        if (urlPostfix) {
-            urlPostfix = typeof options.urlPostfix === "function" ?
-                options.urlPostfix(file.srcName + query, file) : String(options.urlPostfix);
-        }
-        return this.file.createPathPlaceholder(function() {
-            return this.relativePath(file.destName) + (urlPostfix ? query + (query ? '&' : '?') + this.formatName(urlPostfix) : query);
-        });
-    },
-
-    createContentPlaceholder: function() {
-        
-    },
+    ///**
+    // * 创建指定从当前模块访问文件的占位符。
+    // */
+    //createPathPlaceholder: function (file, query, options) {
+    //    var urlPostfix = options.urlPostfix;
+    //    if (urlPostfix) {
+    //        urlPostfix = typeof options.urlPostfix === "function" ?
+    //            options.urlPostfix(file.srcName + query, file) : String(options.urlPostfix);
+    //    }
+    //    return this.file.createPathPlaceholder(function() {
+    //        return this.relativePath(file.destName) + (urlPostfix ? query + (query ? '&' : '?') + this.formatName(urlPostfix) : query);
+    //    });
+    //},
 
     // #endregion
 
     // #region 内容
 
     /**
-     * 获取当前模块的类型。可能的值有空、"html"、"js"、"css"、"text"、"resource"。
+     * 获取当前模块的类型。可能的值有空、"html"、"js"、"css"、"text"、"resource"、"other"。
      */
     type: "",
 
     /**
-     * 获取当前模块预设的打包类型。当 type=="js" 时可能的值有："global"、"amd"、"umd"、"cmd"、"commonjs"。
+     * 获取当前模块预设的打包类型，仅当 type=="js" 时有效。可能的值有："global"、"amd"、"umd"、"cmd"、"commonjs"。
      */
-    buildType: "module",
+    moduleType: "module",
 
     /**
      * 获取当前模块的内容。
      */
     get content() {
-        if (this._content !== undefined) {
+        if (this._content != undefined) {
             return this._content;
         }
-        if (this.file) {
-            return this._content = this.file.content;
-        }
-        try {
-            return this._content = this.download().toString();
-        } catch (e) {
-            return this._content = null;
-        }
+        return this.file.content;
     },
 
     /**
@@ -843,25 +822,85 @@ BuildModule.prototype = {
      * 以二进制格式获取当前模块的内容。
      */
     get buffer() {
-        return this._content !== undefined ? new Buffer(this.content) : this.file.buffer;
+        return this._content != undefined ? new Buffer(this._content) : this.file.buffer;
     },
 
     // #endregion
 
     // #region 引用
+    
+    /**
+     * 标记当前模块的依赖模块。
+     * @param {BuildModule} module 依赖的直接模块。
+     * @returns {Boolean} 如果成功添加依赖则返回 @true，否则返回 @false，说明模块已依赖。 
+     */
+    require: function (module) {
+        if (module.hasRequire(this)) {
+            return false;
+        }
+        if (this.required.indexOf(module) < 0) {
+            this.required.push(module);
+        }
+        return true;
+    },
 
     /**
-     * 添加当前模块的一个包含路径。
-     * @param {} path 
-     * @returns {} 
+     * 判断当前模块及包含项是否已包含目标。
+     * @param {BuildModule} module 依赖的直接模块。
+     * @returns {Boolean} 
+     */
+    hasRequire: function (module) {
+
+        // 被当前模块包含。
+        if (this === module) {
+            return true;
+        }
+
+        for (var i = 0; i < this.required.length; i++) {
+            if (this.required[i].hasRequire(module)) {
+                return true;
+            }
+        }
+
+        return false;
+    },
+    
+    /**
+     * 添加当前模块的一个排除路径。
+     * @param {BuildModule} module 依赖的直接模块。
+     * @returns {Boolean} 
+     */
+    exclude: function (module) {
+        if (this.excluded.indexOf(module) >= 0) {
+            return false;
+        }
+        this.excluded.push(module);
+        return true;
+    },
+
+    /**
+     * 添加当前模块的一个包含文件。
+     * @param {BuildFile} file
+     * @returns {Boolean} 如果成功添加依赖则返回 @true，否则返回 @false，说明模块已依赖。 
      */
     include: function (module) {
         if (module.hasInclude(this)) {
             return null;
         }
-        var id = this.included.length;
-        this.included[id] = module;
-        return "/*_include:" + id + "*/";
+        this.included.push(module);
+
+        // 包含项的依赖项也是当前文件的依赖项。
+        for (var flag in module.flags) {
+            this.flags[flag] = this.flags[flag] || module.flags[flag];
+        }
+        for (var i = 0; i < module.required.length; i++) {
+            this.require(module.required[i]);
+        }
+        for (var i = 0; i < module.excluded.length; i++) {
+            this.exclude(module.excluded[i]);
+        }
+
+        return module.content;
     },
 
     /**
@@ -878,74 +917,6 @@ BuildModule.prototype = {
 
         for (var i = 0; i < this.included.length; i++) {
             if (this.included[i].hasInclude(module)) {
-                return true;
-            }
-        }
-
-        return false;
-    },
-
-    /**
-     * 合并当前模块的 #include 占位符。
-     * @returns {BuildFile} 返回自身。 
-     */
-    mergeIncludes: function () {
-        if (!this.included.length) return this;
-        var module = this;
-        this.content = this.content.replace(/\/\*_include:(\d+)\*\//g, function (all, id) {
-            var include = module.included[id];
-            module.hasAsyncRequire = module.hasAsyncRequire || include.hasAsyncRequire;
-            for (var i = 0; i < include.required.length; i++) {
-                module.require(include.required[i]);
-            }
-            for (var i = 0; i < include.excluded.length; i++) {
-                module.exclude(include.excluded[i]);
-            }
-            return include.content;
-        });
-        return this;
-    },
-
-    /**
-     * 添加当前模块的一个排除路径。
-     * @param {} url 
-     * @returns {} 
-     */
-    exclude: function (module) {
-        if (this.excluded.indexOf(module) < 0) {
-            this.excluded.push(module);
-        }
-    },
-
-    /**
-     * 标记当前模块的依赖模块。
-     * @param {} module 
-     * @returns {} 
-     */
-    require: function (module) {
-        if (module.hasRequire(this)) {
-            return false;
-        }
-        if (this.required.indexOf(module) < 0) {
-            this.required.push(module);
-        }
-        return true;
-    },
-
-    /**
-     * 判断当前模块及包含项是否已包含目标。
-     * @param {} module
-     * @returns {} 
-     */
-    hasRequire: function (module) {
-
-        // 被当前模块包含。
-        if (this === module) {
-            return true;
-        }
-
-        for (var i = 0; i < this.required.length; i++) {
-            if (this.required[i].hasRequire(module)) {
                 return true;
             }
         }
@@ -1022,13 +993,13 @@ BuildModule.prototype = {
      * @returns {String} 返回打包结果。
      */
     pack: function(options) {
-        switch (module.type) {
+        switch (this.type) {
             case "js":
-                return packJsModule(module, options);
+                return packJsModule(this, options);
             case "resource":
                 return null;
             default:
-                return module.content;
+                return this.content;
         }
     }
 
@@ -1055,6 +1026,61 @@ function resolveUrls(module, options, builder) {
 }
 
 /**
+ * 解析文件内的地址。可能为地址内联或追加时间戳。
+ * @param {String} url 要处理的相对路径。
+ * @param {BuildModule} module 当前正在处理的模块。
+ * @param {Object} options 用户设置的传递给当前插件的选项。
+ * @param {Builder} builder 当前正在使用的构建器。
+ * @param {Boolean} [returnContentIfInline=false] 如果需要转为内联时，@true 表示返回内容，@false 表示返回 base64 编码。
+ * @return {String|Object} 返回文件新地址，或者返回文件信息。
+ */
+function parseUrl(url, module, options, builder, returnContentIfInline) {
+
+    // 解析位置。
+    var urlObj = exports.requireResolveUrl(url, module, options, builder);
+    if (urlObj.isUrl) {
+        return url;
+    }
+    if (urlObj.notFound) {
+        builder.warn("{0}: Reference Not Found: '{1}'", module.name, url);
+        return url;
+    }
+
+    // 获取对应的文件。
+    var relatedModule = exports.getModuleFromPath(urlObj.path, options, builder);
+    
+    // 处理内联。
+    var inlineLimit = options.inline === false ? 0 :
+        options.inline === true ? -1 :
+        typeof options.inline === "function" ? options.inline(url, relatedModule.file) ? -1 : 0 :
+        typeof options.inline === "number" ? options.inline :
+        /\b__inline\b/.test(urlObj.query) ? +(/\b__inline\s*=\s*(\d+)/.exec(urlObj.query) || [0, -1])[1] : 0;
+    if (inlineLimit !== 0 && (inlineLimit < 0 || relatedModule.buffer.length < inlineLimit)) {
+        return returnContentIfInline ? {
+            inline: true,
+            content: module.include(relatedModule)
+        } : relatedModule.file.getBase64Url();
+    }
+
+    return buildUrl(relatedModule.file, urlObj.query, options);
+}
+
+/**
+ * 解析文件内联的其它文件。
+ * @param {String} content 内联的内容。
+ * @param {String} ext 内联的扩展名。
+ * @param {BuildModule} module 要解析的模块。
+ * @param {Object} options 用户设置的传递给当前插件的选项。
+ * @param {Builder} builder 当前正在使用的构建器。
+ * @returns {String} 返回处理后的新内联结果。
+ */
+function parseInlined(content, ext, module, options, builder) {
+    var file = builder.createFile(module.name + "#inline" + (module._inlineCounter = (module._inlineCounter + 1) || 0) + ext, content);
+    builder.processFile(file);
+    return file.content;
+}
+
+/**
  * 解析代码内的注释部分。
  * @param {} comment 
  * @param {} module 
@@ -1066,25 +1092,26 @@ function parseComments(comment, module, options, builder) {
 
     // 不解析注释。
     if (options.resolveComments === false) {
-        return;
+        return ;
     }
 
-    var result = "";
+    var result = null;
     
-    // 解析注释 #include(...)
+    // 解析注释
     comment = comment.replace(/#(\w+)\s+(.*)/g, function (all, macroName, macroArgs) {
         if (macroName === "include") {
-            return parseInclude(macroArgs, module, options, builder) || all;
+            result += parseInclude(macroArgs, module, options, builder) || all;
         }
         if (macroName === "exclude") {
-            return parseExclude(macroArgs, module, options, builder);
+            result +=  parseExclude(macroArgs, module, options, builder);
         }
         if (macroName === "moduletype") {
-            return parseModuleType(removeQuotes(macroArgs), module, options, builder);
+            result += parseModuleType(removeQuotes(macroArgs), module, options, builder);
         }
         return all;
     });
 
+    return result;
 }
 
 /**
@@ -1098,7 +1125,7 @@ function parseComments(comment, module, options, builder) {
 function parseInclude(url, module, options, builder) {
 
     // 解析位置。
-    var urlObj = requireResolveUrl(url, module, options, builder);
+    var urlObj = exports.requireResolveUrl(url, module, options, builder);
     if (urlObj.isUrl) {
         builder.warn("{0}: Cannot Include Remote Path: {1}", module.path, url);
         return;
@@ -1109,7 +1136,7 @@ function parseInclude(url, module, options, builder) {
     }
 
     // 尝试包含，判断是否存在互嵌套。
-    var result = module.include(getModuleFromPath(urlObj.path, options, builder));
+    var result = module.include(exports.getModuleFromPath(urlObj.path, options, builder));
     if (!result) {
         builder.warn('{0}: Circular Include with {1}', module.path, url);
         return;
@@ -1129,12 +1156,12 @@ function parseInclude(url, module, options, builder) {
 function parseExclude(url, module, options, builder) {
 
     // 解析位置。
-    var urlObj = requireResolveUrl(url, module, options, builder, true);
+    var urlObj = exports.requireResolveUrl(url, module, options, builder, true);
     if (urlObj.isUrl || urlObj.notFound) {
         return "";
     }
 
-    module.exclude(getModuleFromPath(urlObj.path, options, builder));
+    module.exclude(exports.getModuleFromPath(urlObj.path, options, builder));
     return "";
 }
 
@@ -1149,26 +1176,11 @@ function parseExclude(url, module, options, builder) {
 function parseModuleType(type, module, options, builder) {
     type = type.toLowerCase();
     if (type === "global" || type === "amd" || type === "cmd" || type === "umd" || type === "commonjs") {
-        module.buildType = type;
+        module.moduleType = type;
     } else {
-        builder.warn("{0}: #moduletype Can only be one of `global`, `cmd`, `amd`, `umd` and `commonjs`. Currently is set to {1}", module.path, type);
+        builder.warn("{0}: #moduletype Can only be one of 'global', 'cmd', 'amd', 'umd' and 'commonjs'. Currently is set to {1}", module.name, type);
     }
     return "";
-}
-
-/**
- * 解析文件内联的其它文件。
- * @param {String} content 内联的内容。
- * @param {String} ext 内联的扩展名。
- * @param {BuildModule} module 要解析的模块。
- * @param {Object} options 用户设置的传递给当前插件的选项。
- * @param {Builder} builder 当前正在使用的构建器。
- * @returns {String} 返回处理后的新内联结果。
- */
-function parseInlined(content, ext, module, options, builder) {
-    var file = builder.createFile(module.name + "#inline" + (module._inlineCounter = (module._inlineCounter + 1) || 0) + ext, content);
-    builder.processFile(file);
-    return file.content;
 }
 
 function getFileFromPath(path, builder) {
