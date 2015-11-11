@@ -18,7 +18,7 @@ var IO = require('tealweb/io');
  * @param {Builder} builder 当前正在使用的构建器。
  * @returns {String|Undefined} 返回新文件或新文件内容。
  */
-file.exports = exports = function (file, options, builder) {
+module.exports = exports = function (file, options, builder) {
     var ext = file.extension;
     if (/^\.(html?|inc|jsp|asp|php|aspx|ashx|tpl)$/i.test(ext)) {
         exports.html(file, options, builder);
@@ -76,12 +76,12 @@ exports.url = function (file, options, builder) {
  * * @property {Boolean} notFound 指示当前路径是否指向不存在的文件。
  */
 exports.resolveUrl = function (url, file, options, builder, requireMode, reportErrorIfNotFound) {
-
+    
     // 自主导入地址。
     if (options.importer) {
         url = options.importer(url, file, options, builder, requireMode) || url;
     }
-
+    
     // 不处理网络地址。
     if (isUrl(url)) {
         return {
@@ -89,38 +89,38 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
             url: url
         };
     }
-
+    
     // 搜索路径。
     var paths = [];
-
+    
     // 拆开 ? 前后
     var urlObj = splitUrl(url);
-
+    
     // 相对路径或绝对路径可直接解析。
     if (/^[\.\/]/.test(urlObj.path)) {
-
+        
         // . 开头表示相对路径。
         paths.push(file.resolvePath(urlObj.path));
 
     } else if (Path.isAbsolute(urlObj.path)) {
-
+        
         // 其它绝对路径 E:/a。
         paths.push(urlObj.path);
 
     } else {
-
+        
         // 直接单词开头可以表示相对路径，也可以表示全局搜索路径。
         if (!requireMode) {
             paths.push(file.resolvePath(urlObj.path));
         }
-
+        
         // 全局搜索路径。
         if (options.paths) {
             for (var i = 0; i < options.paths.length; i++) {
                 paths.push(Path.resolve(options.paths[i], urlObj.path));
             }
         }
-
+        
         // node_modules 全局搜索路径。
         if (requireMode && options.searchNodeModules !== false) {
             var dir = file.srcPath, p = null;
@@ -132,17 +132,17 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
         }
 
     }
-
+    
     // 解析各种扩展名组合结果。
     var extensions = options.extensions;
     for (var i = 0; i < paths.length; i++) {
-
+        
         // 判断未补充扩展名是否存在。
         if (IO.existsFile(paths[i])) {
             urlObj.path = paths[i];
             return urlObj;
         }
-
+        
         // 尝试自动填充扩展名。
         if (extensions) {
             for (var j = 0; j < extensions.length; j++) {
@@ -154,13 +154,13 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
         }
 
     }
-
+    
     urlObj.notFound = true;
-
+    
     if (reportErrorIfNotFound) {
         builder.warn(requireMode ? "{0}: Cannot find file '{1}'" : "{0}: Cannot find reference '{1}'", file.srcName, url);
     }
-
+    
     return urlObj;
 };
 
@@ -176,17 +176,17 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
  * @returns {String|Undefined} 返回新文件或新文件内容。
  */
 exports.html = function (file, options, builder) {
-
+    
     if (!initModuleInfo(file, "html")) {
         return;
     }
-
+    
     // 解析地址。
     exports.url(file, options, builder);
-
+    
     // 解析 HTML
-    file.content = file.content.replace(/(<script\b(?:'[^']*'|"[^"]*|[^>])*>)([\s\S]*?)(<\/script(?:'[^']*'|"[^"]*|[^>])*>|$)|(<style\b(?:'[^']*'|"[^"]*|[^>])*>)([\s\S]*?)(<\/style(?:'[^']*'|"[^"]*|[^>])*>|$)|<(img|embed|audio|video|link|object|source)\b(?:'[^']*'|"[^"]*|[^>])*>|<!--([\s\S]*?)(?:-->|$)/ig, function (all, scriptStart, script, scriptEnd, styleStart, style, styleEnd, tag, comment) {
-
+    file.content = file.content.replace(/(<script\b(?:'[^']*'|"[^"]*"|[^>])*>)([\s\S]*?)(<\/script(?:'[^']*'|"[^"]*"|[^>])*>|$)|(<style\b(?:'[^']*'|"[^"]*"|[^>])*>)([\s\S]*?)(<\/style(?:'[^']*'|"[^"]*"|[^>])*>|$)|<(img|embed|audio|video|link|object|source)\b(?:'[^']*'|"[^"]*"|[^>])*>|<!--([\s\S]*?)(?:-->|$)/ig, function (all, scriptStart, script, scriptEnd, styleStart, style, styleEnd, tag, comment) {
+        
         // <script>
         if (scriptStart) {
             var src = getAttr(scriptStart, "src");
@@ -206,40 +206,40 @@ exports.html = function (file, options, builder) {
                 var type = getAttr(scriptStart, "type");
                 script = parseInlined(script, type && type !== "text/javascript" ? builder.getExtByMimeType(type) : '.js', file, options, builder);
             }
-
+            
             // 导出。
             var dest = parseDest(scriptStart, script, file, options, builder);
             if (dest) {
-                return setAttr(scriptStart, "src", dest) + scriptEnd;
+                return removeAttr(setAttr(scriptStart, "src", dest), "__dest") + scriptEnd;
             }
-
+            
             return scriptStart + script + scriptEnd;
         }
-
+        
         // <style>
         if (styleStart) {
-            var type = getAttr(scriptStart, "type");
+            var type = getAttr(styleStart, "type");
             style = parseInlined(style, type && type !== "text/css" ? builder.getExtByMimeType(type) : '.css', file, options, builder);
-
+            
             // 导出。
             var dest = parseDest(styleStart, style, file, options, builder);
             if (dest) {
-                return setAttr(setAttr('<link' + styleStart.substr('<style'.length), 'rel', 'stylesheet'), 'href', dest);
+                return removeAttr(setAttr(setAttr('<link' + styleStart.substr('<style'.length), 'rel', 'stylesheet'), 'href', dest), "__dest");
             }
-
+            
             return styleStart + style + styleEnd;
         }
-
+        
         // <link>: 内联或更新地址
         if (tag) {
-
+            
             // 禁止解析地址。
             if (options.resolveUrl === false) {
                 return all;
             }
-
+            
             // <link>
-            if (/^<link$/i.test(tag)) {
+            if (/^link$/i.test(tag)) {
                 var src = getAttr(all, "href");
                 if (!src) {
                     return all;
@@ -252,29 +252,29 @@ exports.html = function (file, options, builder) {
                 }
                 return setAttr(all, "href", parseUrl(src, file, options, builder));
             }
-
+            
             // <object$>
-            if (/^<object$/i.test(tag)) {
+            if (/^object$/i.test(tag)) {
                 var src = getAttr(all, "data");
                 if (!src) {
                     return all;
                 }
                 return setAttr(all, "data", parseUrl(src, file, options, builder));
             }
-
+            
             // <... src>
             var src = getAttr(all, 'src');
             if (src) {
                 all = setAttr(all, "src", parseUrl(src, file, options, builder));
             }
-
+            
             // <... data-src>
             if ((src = getAttr(all, 'data-src'))) {
                 all = setAttr(all, "data-src", parseUrl(src, file, options, builder));
             }
-
+            
             // <img srcset>
-            if (/^<img/i.test(tag)) {
+            if (/^img$/i.test(tag)) {
                 // http://www.webkit.org/demos/srcset/
                 // <img src="image-src.png" srcset="image-1x.png 1x, image-2x.png 2x, image-3x.png 3x, image-4x.png 4x">
                 var srcset = getAttr(all, "srcset");
@@ -285,15 +285,15 @@ exports.html = function (file, options, builder) {
                     all = setAttr("srcset", srcset);
                 }
             }
-
+            
             return all;
         }
-
+        
         // <!-- -->
         if (comment) {
             return parseComments(all, file, options, builder);
         }
-
+        
         return all;
     });
 
@@ -327,15 +327,15 @@ function parseDest(startTag, content, file, options, builder) {
     if (options.resolveUrl === false) {
         return;
     }
-
+    
     var dest = getAttr(startTag, "__dest");
     if (!dest || isUrl(dest)) {
         return;
     }
-
+    
     var urlObj = splitUrl(dest);
-    var relatedFile = exports.getFile(file.resolvePath(urlObj.path), options, builder);
-    relatedFile.content += content;
+    var relatedFile = builder.getFile(builder.getName(file.resolvePath(urlObj.path)));
+    relatedFile.content = content;
     relatedFile.save();
     return buildUrl(relatedFile, urlObj.query, dest, file, options);
 }
@@ -384,64 +384,64 @@ function removeAttr(html, attrName) {
  * @returns {String|Undefined} 返回新文件或新文件内容。
  */
 exports.js = function (file, options, builder) {
-
+    
     if (!initModuleInfo(file, "js")) {
         return;
     }
-
+    
     // 解析地址。
     exports.url(file, options, builder);
-
+    
     // 解析 JS 代码。
-    file.content = file.content.replace(/'(?:[^\\'\n\r\f]|\\[\s\S])*'|"(?:[^\\"\r\n\f]|\\[\s\S])*"|\/(\/[^\r\n\f]+|\*[\s\S]*?(?:\*\/|$))|\brequire\s*\(\s*('(?:[^\\'\n\r\f]|\\[\s\S])*'\s*\)|"(?:[^\\"\r\n\f]|\\[\s\S])*"\s*\)|\[(?:(?:'(?:[^\\'\n\r\f]|\\[\s\S])*'|"(?:[^\\"\r\n\f]|\\[\s\S])*"),?\s*)+\]\s*(?:,|function\b))|\b(exports\.|file\.|process\.|global\.|Buffer\b|setImmediate\b|clearImmediate\b)/g, function (all, comment, require, symbols) {
-
+    file.content = file.content.replace(/'(?:[^\\'\n\r\f]|\\[\s\S])*'|"(?:[^\\"\r\n\f]|\\[\s\S])*"|\/(\/[^\r\n\f]+|\*[\s\S]*?(?:\*\/|$))|\brequire\s*\(\s*('(?:[^\\'\n\r\f]|\\[\s\S])*'\s*\)|"(?:[^\\"\r\n\f]|\\[\s\S])*"\s*\)|\[(?:(?:'(?:[^\\'\n\r\f]|\\[\s\S])*'|"(?:[^\\"\r\n\f]|\\[\s\S])*"),?\s*)+\]\s*(?:,|function\b))|\b(exports\.|module\.|process\.|global\.|Buffer\b|setImmediate\b|clearImmediate\b)/g, function (all, comment, require, symbol) {
+        
         // 处理注释。//  或 /*...*/
         if (comment) {
             return parseComments(all, file, options, builder);
         }
-
+        
         // 不处理 require 和其它标识。
         if (options.commonJs === false) {
             return all;
         }
-
+        
         // 处理 require。// '...' 或 "..." 或 [...]
         if (require) {
             // 异步 require, require([...], 
             if (require.startsWith("[")) {
-                return all.replace(/'((?:[^\\'\n\r\f]|\\[\s\S])*)'|"((?:[^\\"\r\n\f]|\\[\s\S])*)"/g, function (all, url, url2) {
-                    return JSON.stringify(parseAsyncRequire(url || url2, file, options, builder));
+                return all.replace(/'((?:[^\\'\n\r\f]|\\[\s\S])*)'|"((?:[^\\"\r\n\f]|\\[\s\S])*)"/g, function (all, url1, url2) {
+                    return JSON.stringify(parseAsyncRequire(url1 || url2, file, options, builder));
                 });
             }
-
+            
             // 同步 require, require('...')
-            return all.replace(/'((?:[^\\'\n\r\f]|\\[\s\S])*)'|"((?:[^\\"\r\n\f]|\\[\s\S])*)"/, function (all, url, url2) {
-                return JSON.stringify(parseCommonJsRequire(url || url2, file, options, builder));
+            return all.replace(/'((?:[^\\'\n\r\f]|\\[\s\S])*)'|"((?:[^\\"\r\n\f]|\\[\s\S])*)"/, function (all, url1, url2) {
+                return JSON.stringify(parseCommonJsRequire(url1 || url2, file, options, builder));
             });
         }
-
+        
         // 全局标识符。
-        if (symbols) {
-            file.flags[symbols.replace(/\.$/, "")] = true;
+        if (symbol) {
+            parseSymbol(symbol.replace(/\.$/, ""), file, options, builder);
         }
-
+        
         return all;
     });
-
+    
     // 打包 JS 模块。
-
+    
     // 如果当前文件无依赖项且不不需要 commonJs 支持则不需合并。
-    if (file.moduleBuildType === "global" || (!file.moduleRequired.length && !file.flags.commonJs)) {
+    if (file.moduleBuildType === "global" || (!file.moduleRequired.length && !file.moduleFlags.commonJs)) {
         return;
     }
-
+    
     // 设置模块源码，以便其它模块依赖此模块时能获取到不含模块头的源码。
     file.moduleContent = file.content;
-
+    
     // 自动排除文件。
     if (options.externs) {
         var externList;
-
+        
         // 找到适合当前文件的排除列表。
         if (Array.isArray(options.externs)) {
             externList = options.externs;
@@ -453,7 +453,7 @@ exports.js = function (file, options, builder) {
                 }
             }
         }
-
+        
         if (externList) {
             for (var i = 0; i < externList.length; i++) {
                 var relatedFile = exports.getFile(externList[i]);
@@ -462,11 +462,11 @@ exports.js = function (file, options, builder) {
                 }
             }
         }
-       
+
     }
-
+    
     var mergeResult = mergeModuleInfos(file);
-
+    
     // 处理结果和导出。
     var result = "";
     var exportedResults = { __proto__: null };
@@ -475,10 +475,10 @@ exports.js = function (file, options, builder) {
             exportedResults[key] = '';
         }
     }
-
+    
     // 添加公共头。
     if (mergeResult.externd.length === 0) {
-
+        
         result += 'var __tpack__ = __tpack__ || {\r\n' +
             '\tmodules: { __proto__: null },\r\n' +
             '\tdefine: function (moduleName, factory) {\r\n' +
@@ -487,7 +487,7 @@ exports.js = function (file, options, builder) {
             '\t\t\texports: {}\r\n' +
             '\t\t};\r\n' +
             '\t}';
-
+        
         // 追加 insertStyle 函数。
         if (!('css' in exportedResults) && mergeResult.required.some(function (file) {
             return file.moduleType === "css";
@@ -496,72 +496,72 @@ exports.js = function (file, options, builder) {
             result += ',\r\n\tinsertStyle: function (style) {\r\n' +
                 '\t}';
         }
-
+        
         // 带异步加载和不带的版本
         if (mergeResult.flags.hasAsyncRequire) {
             // TODO
             result += ',\r\n\trequire: function (moduleName, callback) {\r\n' +
-                '\t\tvar file = __tpack__.modules[moduleName];\r\n' +
-                '\t\tif (!file) {\r\n' +
-                '\t\t\tthrow new Error("Can not find file: " + moduleName);\r\n' +
+                '\t\tvar module = __tpack__.modules[moduleName];\r\n' +
+                '\t\tif (!module) {\r\n' +
+                '\t\t\tthrow new Error("Can not find module: " + moduleName);\r\n' +
                 '\t\t}\r\n' +
-                '\t\tif (!file.loaded) {\r\n' +
+                '\t\tif (!module.loaded) {\r\n' +
                 '\t\t\tmodule.loaded = true;\r\n' +
-                '\t\t\tmodule.factory.call(file.exports, file.exports, file, __tpack__.require, moduleName);\r\n' +
+                '\t\t\tmodule.factory.call(module.exports, module.exports, module, __tpack__.require, moduleName);\r\n' +
                 '\t\t}\r\n' +
-                '\t\treturn file.exports;\r\n' +
+                '\t\treturn module.exports;\r\n' +
                 '\t}';
         } else {
             result += ',\r\n\trequire: function (moduleName, callback) {\r\n' +
-                '\t\tvar file = __tpack__.modules[moduleName];\r\n' +
-                '\t\tif (!file) {\r\n' +
-                '\t\t\tthrow new Error("Can not find file: " + moduleName);\r\n' +
+                '\t\tvar module = __tpack__.modules[moduleName];\r\n' +
+                '\t\tif (!module) {\r\n' +
+                '\t\t\tthrow new Error("Can not find module: " + moduleName);\r\n' +
                 '\t\t}\r\n' +
-                '\t\tif (!file.loaded) {\r\n' +
+                '\t\tif (!module.loaded) {\r\n' +
                 '\t\t\tmodule.loaded = true;\r\n' +
-                '\t\t\tmodule.factory.call(file.exports, file.exports, file, __tpack__.require, moduleName);\r\n' +
+                '\t\t\tmodule.factory.call(module.exports, module.exports, module, __tpack__.require, moduleName);\r\n' +
                 '\t\t}\r\n' +
-                '\t\treturn file.exports;\r\n' +
+                '\t\treturn module.exports;\r\n' +
                 '\t}';
         }
-
+        
         result += '\r\n};\r\n';
 
     }
-
+    
     // 遍历模块及其所有依赖项。
     for (var i = 0; i < mergeResult.required.length; i++) {
         var relatedFile = mergeResult.required[i];
-
+        
         // 支持导出代码。
         if (relatedFile.moduleType in exportedResults) {
             var content = relatedFile.moduleContent || relatedFile.content;
             exportedResults[relatedFile.moduleType] += '\r\n' + content + '\r\n';
             continue;
         }
-
+        
         switch (relatedFile.moduleType) {
             case 'js':
                 var content = relatedFile.moduleContent || relatedFile.content;
-                result += '\r\n__tpack__.define(' + JSON.stringify(relatedFile.moduleName || relatedFile.srcName) + ', function(exports, file, require){\r\n';
-
+                result += '\r\n__tpack__.define(' + JSON.stringify(relatedFile.moduleName || relatedFile.srcName) + ', function(exports, module, require){\r\n';
+                
                 // 插入全局变量。
-                if (relatedFile.flags.global) {
+                if (relatedFile.moduleFlags.global) {
                     result += 'var global = (function(){return this;})();\r\n';
                 }
-                if (relatedFile.flags.process) {
+                if (relatedFile.moduleFlags.process) {
                     result += 'var process = __tpack__.require("process");\r\n';
                 }
-                if (relatedFile.flags.Buffer) {
+                if (relatedFile.moduleFlags.Buffer) {
                     result += 'var Buffer = __tpack__.require("buffer");\r\n';
                 }
-                if (relatedFile.flags.setImmediate) {
+                if (relatedFile.moduleFlags.setImmediate) {
                     result += 'var setImmediate = __tpack__.require("timer").setImmediate;\r\n';
                 }
-                if (relatedFile.flags.clearImmediate) {
+                if (relatedFile.moduleFlags.clearImmediate) {
                     result += 'var clearImmediate = __tpack__.require("timer").clearImmediate;\r\n';
                 }
-
+                
                 result += content + '\r\n' +
                     '});\r\n';
                 break;
@@ -577,14 +577,14 @@ exports.js = function (file, options, builder) {
                 if ('resource' in options.exports) {
                     var dest = relatedFile.destName;
                     // TODO
-                    result += JSON.stringify(file.createPathPlaceholder(dest));
+                    result += JSON.stringify(file.createPlaceholder(dest));
                 } else {
                     result += JSON.stringify(relatedFile.getBase64Url());
                 }
                 break;
         }
     }
-
+    
     // 添加公共尾。
     var entry = JSON.stringify(file.moduleName || file.srcName);
     switch (file.moduleBuildType) {
@@ -594,23 +594,23 @@ exports.js = function (file, options, builder) {
         case "umd":
             result += '\r\nif (typeof define !== "undefined" && define.amd) {\r\n' +
                 '\tdefine(function () { return __tpack__.require(' + entry + '); });\r\n' +
-                '} else if (typeof file !== "undefined") {\r\n' +
+                '} else if (typeof module !== "undefined") {\r\n' +
                 '\tmodule.exports = __tpack__.require(' + entry + ');\r\n' +
                 '} else {\r\n' +
-                '\t (function (exports, value) {\r\n' +
-                '\t\tfor (var key in value)\r\n' +
+                '\t(function (exports, value) {\r\n' +
+                '\t\tfor (var key in value) {\r\n' +
                 '\t\t\texports[key] = value[key];\r\n' +
-                '\t\t})(typeof exports === "object" ? exports : this, __tpack__.require(' + entry + '));';
+                '\t\t}' +
+                '\t})(typeof exports === "object" ? exports : this, __tpack__.require(' + entry + '));\r\n' +
+                '}';
             break;
         case "amd":
-            result = "define([], function(){ \r\n" +
-                result + "\r\n" +
+            result += "define([], function(){ \r\n" +
                 "\treturn __tpack__.require(0);\r\n" +
                 "})";
             break;
         case "cmd":
-            result = "define([], function(exports, file, require){ \r\n" +
-                result + "\r\n" +
+            result += "define([], function(exports, module, require){ \r\n" +
                 "\tmodule.exports = __tpack__.require(0);\r\n" +
                 "})";
             break;
@@ -618,7 +618,7 @@ exports.js = function (file, options, builder) {
             result += '\r\nmodule.exports = __tpack__.require(' + entry + ');';
             break;
     }
-
+    
     // 保存生成的内容。
     file.content = result;
 
@@ -633,28 +633,28 @@ exports.js = function (file, options, builder) {
  * @returns {String} 返回原 require() 占位符。
  */
 function parseCommonJsRequire(url, file, options, builder) {
-
+    
     file.moduleFlags.commonJs = true;
-
+    
     // 解析 node 内置模块。
     if (options.resolveNodeNativeModules !== false) {
         var path = getNodeNativeModule(url);
         if (path && path !== file.srcPath) {
             // 标记依赖全局模块。
-            file.flags[url] = true;
-            var relatedFile = getFileFromPath(urlObj.path, options, builder);
+            file.moduleFlags[url] = true;
+            var relatedFile = exports.getFile(path, options, builder);
             relatedFile.moduleName = url;
             requireModule(file, relatedFile, builder);
-            return relatedModule.moduleName;
+            return relatedFile.moduleName;
         }
     }
-
+    
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, true);
     if (urlObj.isUrl || urlObj.notFound) {
         return url;
     }
-
+    
     // 解析目标模块。
     var relatedFile = exports.getFile(urlObj.path, options, builder);
     requireModule(file, relatedFile, builder);
@@ -670,18 +670,35 @@ function parseCommonJsRequire(url, file, options, builder) {
  * @returns {String} 返回原 require() 占位符。
  */
 function parseAsyncRequire(url, file, options, builder) {
-
+    
     file.moduleFlags.commonJs = file.moduleFlags.hasAsyncRequire = true;
-
+    
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, true);
     if (urlObj.isUrl || urlObj.notFound) {
         return url;
     }
-
+    
     // 生成最终地址。
     var relatedFile = builder.getFile(builder.getName(urlObj.path));
     return buildUrl(relatedFile, urlObj.query, url, file, options);
+}
+
+/**
+ * 解析一个文件内的符号。
+ * @param {String} url 被包含的地址。
+ * @param {BuildFile} file 当前正在编译的文件。
+ * @param {Object} options 用户设置的传递给当前插件的选项。
+ * @param {Builder} builder 当前正在使用的构建器。
+ */
+function parseSymbol(symbol, file, options, builder) {
+    
+    file.moduleFlags.commonJs = true;
+    
+    if (symbol !== "exports" && symbol !== "module" && options.resolveNodeNativeModules !== false) {
+        parseCommonJsRequire(symbol, file, options, builder);
+    }
+    
 }
 
 /**
@@ -705,55 +722,47 @@ function getNodeNativeModule(url) {
  * @returns {String|Undefined} 返回新文件或新文件内容。
  */
 exports.css = function (file, options, builder) {
-
+    
     if (!initModuleInfo(file, "css")) {
         return;
     }
-
+    
     // 解析地址。
     exports.url(file, options, builder);
-
-    file.content = file.content.replace(/(\/\*[\s\S]*?(?:\*\/|$))|(@import\s+)?\burl\s*\(\s*("(?:[^\\"\r\n\f]|\\[\s\S])*"|'(?:[^\\'\n\r\f]|\\[\s\S])*'|[^)}]+)\s*\)(?:\s*;?)|\bsrc\s*=\s*("(?:[^\\"\r\n\f]|\\[\s\S])*"|'(?:[^\\'\n\r\f]|\\[\s\S])*'|[^)}]+)/g, function (all, comment, atImport, url, filter) {
-
+    
+    file.content = file.content.replace(/(\/\*[\s\S]*?(?:\*\/|$))|(@import\s+)?\burl\s*\(\s*("(?:[^\\"\r\n\f]|\\[\s\S])*"|'(?:[^\\'\n\r\f]|\\[\s\S])*'|[^)}]+?)\s*\)\s*;?|\bsrc\s*=\s*("(?:[^\\"\r\n\f]|\\[\s\S])*"|'(?:[^\\'\n\r\f]|\\[\s\S])*'|[^)}]+)/g, function (all, comment, atImport, url, filter) {
+        
         if (comment) {
             return parseComments(all, file, options, builder);
         }
-
-        if (url) {
-            if (atImport) {
-                var result = null;
-                all = all.replace(/"((?:[^\\"\r\n\f]|\\[\s\S])*)"|'((?:[^\\'\n\r\f]|\\[\s\S])*)'|[^)}]+/, function (all, url, url2) {
-                    result = parseImport(url || url2 || all, file, options, builder);
+        
+        if (url || filter) {
+            all = all.replace(/\(\s*(?:"((?:[^\\"\r\n\f]|\\[\s\S])*)"|'((?:[^\\'\n\r\f]|\\[\s\S])*)'|([^)}]+?))\s*\)/, function (all, url1, url2, url3) {
+                var url = url1 || url2 || url3;
+                if (atImport) {
+                    atImport = parseImport(url, file, options, builder);
                     return all;
-                });
-                return result == null ? all : result;
+                }
+                return JSON.stringify(parseUrl(url, file, options, builder));
+            });
+            if (atImport) {
+                return "";
             }
-
-            return all.replace(/"((?:[^\\"\r\n\f]|\\[\s\S])*)"|'((?:[^\\'\n\r\f]|\\[\s\S])*)'|[^)}]+/, function (all, url, url2) {
-                return JSON.stringify(parseUrl(url || url2 || all, file, options, builder));
-            });
         }
-
-        if (filter) {
-            return all.replace(/"((?:[^\\"\r\n\f]|\\[\s\S])*)"|'((?:[^\\'\n\r\f]|\\[\s\S])*)'|[^)}]+/, function (all, url, url2) {
-                return JSON.stringify(parseUrl(url || url2 || all, file, options, builder));
-            });
-        }
-
+        
         return all;
-
     });
-
+    
     // 如果当前文件无依赖项则不需合并。
     if (file.moduleBuildType === "global" || !file.moduleRequired.length) {
         return;
     }
-
+    
     // 设置模块源码，以便其它模块依赖此模块时能获取到不含模块头的源码。
     file.moduleContent = file.content;
-
+    
     var mergeResult = mergeModuleInfos(file);
-
+    
     var result = "";
     for (var i = 0; i < mergeResult.required.length; i++) {
         result += mergeResult.required[i].moduleContent || mergeResult.required[i].content + "\r\n";
@@ -767,20 +776,20 @@ exports.css = function (file, options, builder) {
  * @param {BuildFile} file 当前正在编译的文件。
  * @param {Object} options 用户设置的传递给当前插件的选项。
  * @param {Builder} builder 当前正在使用的构建器。
- * @returns {String} 返回原 require() 占位符。
+ * @returns {Boolean} 返回解析结果。
  */
 function parseImport(url, file, options, builder) {
-
+    
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, true);
     if (urlObj.isUrl || urlObj.notFound) {
-        return;
+        return false;
     }
-
+    
     // 解析目标模块。
     var relatedFile = exports.getFile(urlObj.path, options, builder);
     requireModule(file, relatedFile, builder);
-    return "";
+    return true;
 }
 
 // #endregion
@@ -795,11 +804,11 @@ function parseImport(url, file, options, builder) {
  * @returns {String|Undefined} 返回新文件或新文件内容。
  */
 exports.text = function (file, options, builder) {
-
+    
     if (!initModuleInfo(file, "text")) {
         return;
     }
-
+    
     // 解析地址。
     exports.url(file, options, builder);
 
@@ -827,7 +836,7 @@ exports.resource = function (file, options, builder) {
  * @returns {Boolean} 如果返回 @false，说明文件已初始化。
  */
 function initModuleInfo(file, type) {
-    if (!file.moduleType) {
+    if (file.moduleType) {
         return false;
     }
     file.moduleType = type;
@@ -902,9 +911,9 @@ function includeModule(file, targetFile, builder) {
     if (file.moduleIncluded.indexOf(targetFile) >= 0) {
         return;
     }
-
+    
     file.moduleIncluded.push(targetFile);
-
+    
     // 复制目标文件的所有属性。
     file.hasPlaceholder = file.hasPlaceholder || targetFile.hasPlaceholder;
     mergeFlags(file.moduleFlags, targetFile.moduleFlags);
@@ -944,47 +953,47 @@ function hasModuleIncluded(file, targetFile) {
  * * @property {Object} flags 各文件标记位的集合。
  */
 function mergeModuleInfos(file) {
-
+    
     var result = {
         included: [],
         externd: [],
         required: [],
         flags: { __proto__: null }
     };
-
+    
     // 添加包含项。
     function include(file) {
         if (result.included.indexOf(file) >= 0) {
             return;
         }
         result.included.push(file);
-
+        
         for (var i = 0; i < file.moduleRequired.length; i++) {
             include(file.moduleRequired[i]);
         }
-
+        
         for (var i = 0; i < file.moduleExternd.length; i++) {
             extern(file.moduleExternd[i]);
         }
-
+        
         result.required.push(file);
     }
-
+    
     // 添加一个排除项，排除项依赖的项同时排除。
     function extern(file) {
         if (result.externd.indexOf(file) >= 0) {
             return;
         }
         result.externd.push(file);
-
+        
         for (var i = 0; i < file.moduleRequired.length; i++) {
             extern(file.moduleRequired[i]);
         }
 
     }
-
+    
     include(file);
-
+    
     // 应用排除项和记号位。
     for (var i = result.required.length - 1; i >= 0; i--) {
         if (result.externd.indexOf(result.required[i]) >= 0) {
@@ -993,7 +1002,7 @@ function mergeModuleInfos(file) {
         }
         mergeFlags(result.flags, result.required[i].flags);
     }
-
+    
     return result;
 }
 
@@ -1024,16 +1033,16 @@ function mergeFlags(dest, src) {
  * @return {String|Object} 返回文件新地址，或者返回文件信息。
  */
 function parseUrl(url, file, options, builder, returnContentIfInline) {
-
+    
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, true);
     if (urlObj.isUrl || urlObj.notFound) {
         return url;
     }
-
+    
     // 获取对应的文件。
     var relatedFile = exports.getFile(urlObj.path, options, builder);
-
+    
     // 处理内联。
     var inlineLimit = options.inline === false ? 0 :
         options.inline === true ? -1 :
@@ -1050,19 +1059,19 @@ function parseUrl(url, file, options, builder, returnContentIfInline) {
         }
         return relatedFile.getBase64Url();
     }
-
+    
     return buildUrl(relatedFile, urlObj.query, url, file, options);
 }
 
 function buildUrl(relatedFile, query, url, file, options) {
-
+    
     // 追加后缀。
     if (options.appendUrl) {
         query += (query ? '&' : '?') + (typeof options.appendUrl === "function" ? options.appendUrl(url, relatedFile) : relatedFile.formatName(String(options.appendUrl)));
     }
-
+    
     // 返回路径占位符。
-    return file.createPathPlaceholder(relatedFile.destName) + query;
+    return file.createPlaceholder(relatedFile.destName) + query;
 }
 
 function isUrl(url) {
@@ -1096,12 +1105,14 @@ function parseComments(comment, file, options, builder) {
     if (options.resolveComment === false) {
         return comment;
     }
-    var result = null;
+    var hasInclude = false;
+    var result = "";
     comment.replace(/#(\w+)\s+(.*)/g, function (all, macroName, macroArgs) {
         switch (macroName) {
             case "include":
                 var value = parseInclude(removeQuotes(macroArgs), file, options, builder);
                 if (value != null) {
+                    hasInclude = true;
                     result += value;
                 }
                 break;
@@ -1113,7 +1124,7 @@ function parseComments(comment, file, options, builder) {
                 break;
         }
     });
-    return result == null ? comment : result;
+    return hasInclude ? result : comment;
 }
 
 /**
@@ -1125,7 +1136,7 @@ function parseComments(comment, file, options, builder) {
  * @returns {String} 返回被包含文件的内容。
  */
 function parseInclude(url, file, options, builder) {
-
+    
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, false);
     if (urlObj.isUrl) {
@@ -1134,13 +1145,13 @@ function parseInclude(url, file, options, builder) {
     }
     if (urlObj.notFound) {
         builder.warn("{0}: Cannot find include file '{1}'", file.srcName, url);
-        return;
+        return; file.flags
     }
-
+    
     // 尝试包含，判断是否存在互嵌套。
     var relatedFile = exports.getFile(urlObj.path, options, builder);
     includeModule(file, relatedFile, builder);
-    return relatedFile.content;
+    return relatedFile.moduleContent || relatedFile.content;
 }
 
 /**
@@ -1151,13 +1162,13 @@ function parseInclude(url, file, options, builder) {
  * @param {Builder} builder 当前正在使用的构建器。
  */
 function parseExtern(url, file, options, builder) {
-
+    
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, false);
     if (urlObj.isUrl || urlObj.notFound) {
         return;
     }
-
+    
     var relatedFile = exports.getFile(urlObj.path, options, builder);
     externModule(file, relatedFile, builder);
 }
