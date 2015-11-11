@@ -639,7 +639,11 @@ function parseCommonJsRequire(url, file, options, builder) {
     // 解析 node 内置模块。
     if (options.resolveNodeNativeModules !== false) {
         var path = getNodeNativeModule(url);
-        if (path && path !== file.srcPath) {
+        if (path) {
+            // 忽略自依赖文件。
+            if(path !== file.srcPath) {
+                return;
+            }
             // 标记依赖全局模块。
             file.moduleFlags[url] = true;
             var relatedFile = exports.getFile(path, options, builder);
