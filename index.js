@@ -1075,11 +1075,11 @@ function buildUrl(relatedFile, query, url, file, options) {
 }
 
 function isUrl(url) {
-    return /^(\w+:)?\/\//.test(url);
+    return /^(?:(?:\w+:)?\/\/|data:)/.test(url);
 }
 
 function splitUrl(url) {
-    var urlObj = /^(.*)([\?&].*)$/.exec(url);
+    var urlObj = /^(.*?)([?&#].*)$/.exec(url);
     return urlObj ? {
         path: urlObj[1],
         query: urlObj[2]
