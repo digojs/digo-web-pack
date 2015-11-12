@@ -1,4 +1,5 @@
 ﻿
+var Path = require("path");
 var tpack = require('tpack');
 
 var input = tpack.options[2];
@@ -9,8 +10,8 @@ if(!input || !output) {
 	return;
 }
 
-input = tpack.getName(input);
-output = tpack.getName(output);
+input = tpack.getName(Path.resolve(input));
+output = tpack.getName(Path.resolve(output));
 
 tpack.src("*").pipe(require("./index.js"), {
 	nodejs: true
