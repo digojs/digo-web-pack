@@ -85,84 +85,101 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
     // 不处理网络地址。
     if (isUrl(url)) {
         return {
-            isUrl: true,
             url: url
         };
     }
     
-    // 搜索路径。
-    var paths = [];
-    
     // 拆开 ? 前后
     var urlObj = splitUrl(url);
     
+    // 解析各种扩展名组合结果。
+    var extensions = options.extensions || [".node", ".json", ".js"];
+    
     // 相对路径或绝对路径可直接解析。
     if (/^[\.\/]/.test(urlObj.path)) {
-        
-        // . 开头表示相对路径。
-        paths.push(file.resolvePath(urlObj.path));
-
+        urlObj.path = findModulePath(file.resolvePath(urlObj.path), extensions);
     } else if (Path.isAbsolute(urlObj.path)) {
-        
-        // 其它绝对路径 E:/a。
-        paths.push(urlObj.path);
-
+        urlObj.path = findModulePath(urlObj.path, extensions);
     } else {
+        
+        var path = null;
         
         // 直接单词开头可以表示相对路径，也可以表示全局搜索路径。
         if (!requireMode) {
-            paths.push(file.resolvePath(urlObj.path));
-        }
-        
-        // 全局搜索路径。
-        if (options.paths) {
-            for (var i = 0; i < options.paths.length; i++) {
-                paths.push(Path.resolve(options.paths[i], urlObj.path));
-            }
-        }
-        
-        // node_modules 全局搜索路径。
-        if (requireMode && options.searchNodeModules !== false) {
-            var dir = file.srcPath, p = null;
-            while (p !== dir) {
-                p = dir;
+            path = findModulePath(file.resolvePath(urlObj.path), extensions);
+        } else if (options.searchNodeModules !== false || options.nodejs) {
+            var dir = file.srcPath;
+            while (true) {
+                var prev = dir;
                 dir = Path.dirname(dir);
-                paths.push(Path.join(dir, 'node_modules', urlObj.path));
-            }
-        }
-
-    }
-    
-    // 解析各种扩展名组合结果。
-    var extensions = options.extensions;
-    for (var i = 0; i < paths.length; i++) {
-        
-        // 判断未补充扩展名是否存在。
-        if (IO.existsFile(paths[i])) {
-            urlObj.path = paths[i];
-            return urlObj;
-        }
-        
-        // 尝试自动填充扩展名。
-        if (extensions) {
-            for (var j = 0; j < extensions.length; j++) {
-                if (IO.existsFile(paths[i] + extensions[j])) {
-                    urlObj.path = paths[i] + extensions[j];
-                    return urlObj;
+                if (prev === dir) {
+                    break;
+                }
+                
+                if ((path = findModulePath(Path.join(dir, 'node_modules', urlObj.path), extensions))) {
+                    break;
                 }
             }
         }
-
+        
+        // 全局搜索路径。
+        if (!path && options.paths) {
+            for (var i = 0; i < options.paths.length; i++) {
+                if ((path = findModulePath(Path.resolve(options.paths[i], urlObj.path), extensions))) {
+                    break;
+                }
+            }
+        }
+        
+        urlObj.path = path;
+        
     }
     
-    urlObj.notFound = true;
-    
-    if (reportErrorIfNotFound) {
-        builder.warn(requireMode ? "{0}: Cannot find file '{1}'" : "{0}: Cannot find reference '{1}'", file.srcName, url);
+    if (reportErrorIfNotFound && !urlObj.path) {
+        builder.warn(requireMode ? "{0}: Cannot find module '{1}'" : "{0}: Cannot find reference '{1}'", file.srcName, url);
     }
     
     return urlObj;
 };
+
+/**
+ * 通过追加后缀的方式尝试搜索模块。
+ */
+function findModulePath(path, extensions) {
+    
+    // 文件已存在，不需要继续搜索。
+    if (IO.existsFile(path)) {
+        return path;
+    }
+    
+    // 尝试追加扩展名。
+    for (var i = 0; i < extensions.length; i++) {
+        var p = path + extensions[i];
+        if (IO.existsFile(p)) {
+            return p;
+        }
+    }
+    
+    // 尝试读取 package.json
+    var p = Path.join(path, "package.json");
+    if (IO.existsFile(p)) {
+        try {
+            if (IO.existsFile(p = Path.join(path, require(p).main))) {
+                return p;
+            }
+        } catch (e) { }
+    }
+    
+    // 尝试追加首页。
+    for (var i = 0; i < extensions.length; i++) {
+        var p = Path.join(path, "index" + extensions[i]);
+        if (IO.existsFile(p)) {
+            return p;
+        }
+    }
+    
+    return null;
+}
 
 // #endregion
 
@@ -422,7 +439,7 @@ exports.js = function (file, options, builder) {
         
         // 全局标识符。
         if (symbol) {
-            parseSymbol(symbol.replace(/\.$/, ""), file, options, builder);
+            parseSymbol(symbol, file, options, builder);
         }
         
         return all;
@@ -494,6 +511,7 @@ exports.js = function (file, options, builder) {
         })) {
             // TODO
             result += ',\r\n\tinsertStyle: function (style) {\r\n' +
+                'throw "Not Supported yet."' +
                 '\t}';
         }
         
@@ -501,9 +519,10 @@ exports.js = function (file, options, builder) {
         if (mergeResult.flags.hasAsyncRequire) {
             // TODO
             result += ',\r\n\trequire: function (moduleName, callback) {\r\n' +
+                'if(callback) throw "Not Supported yet."' +
                 '\t\tvar module = __tpack__.modules[moduleName];\r\n' +
                 '\t\tif (!module) {\r\n' +
-                '\t\t\tthrow new Error("Can not find module: " + moduleName);\r\n' +
+                '\t\t\tthrow new Error("Cannot find module \'" + moduleName + "\'");\r\n' +
                 '\t\t}\r\n' +
                 '\t\tif (!module.loaded) {\r\n' +
                 '\t\t\tmodule.loaded = true;\r\n' +
@@ -515,7 +534,7 @@ exports.js = function (file, options, builder) {
             result += ',\r\n\trequire: function (moduleName, callback) {\r\n' +
                 '\t\tvar module = __tpack__.modules[moduleName];\r\n' +
                 '\t\tif (!module) {\r\n' +
-                '\t\t\tthrow new Error("Can not find module: " + moduleName);\r\n' +
+                '\t\t\tthrow new Error("Cannot find module \'" + moduleName + "\'");\r\n' +
                 '\t\t}\r\n' +
                 '\t\tif (!module.loaded) {\r\n' +
                 '\t\t\tmodule.loaded = true;\r\n' +
@@ -574,7 +593,7 @@ exports.js = function (file, options, builder) {
                 result += JSON.stringify(relatedFile.content);
                 break;
             case "resource":
-                if ('resource' in options.exports) {
+                if (options.exports && 'resource' in options.exports) {
                     var dest = relatedFile.destName;
                     // TODO
                     result += JSON.stringify(file.createPlaceholder(dest));
@@ -641,21 +660,32 @@ function parseCommonJsRequire(url, file, options, builder) {
         var path = getNodeNativeModule(url);
         if (path) {
             // 忽略自依赖文件。
-            if(path !== file.srcPath) {
-                return;
+            if (path === file.srcPath || options.nodejs || options.ignoreNodeNativeModules === true) {
+                return url;
             }
             // 标记依赖全局模块。
             file.moduleFlags[url] = true;
             var relatedFile = exports.getFile(path, options, builder);
             relatedFile.moduleName = url;
             requireModule(file, relatedFile, builder);
-            return relatedFile.moduleName;
+            return url;
+        }
+        
+        // 仅 nodejs 支持的内置模块。
+        if (options.nodejs) {
+            try {
+                if (require.resolve(url) === url) {
+                    return url;
+                }
+            } catch (e) {
+                
+            }
         }
     }
     
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, true);
-    if (urlObj.isUrl || urlObj.notFound) {
+    if (urlObj.url || !urlObj.path) {
         return url;
     }
     
@@ -679,7 +709,7 @@ function parseAsyncRequire(url, file, options, builder) {
     
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, true);
-    if (urlObj.isUrl || urlObj.notFound) {
+    if (urlObj.url || !urlObj.path) {
         return url;
     }
     
@@ -699,8 +729,27 @@ function parseSymbol(symbol, file, options, builder) {
     
     file.moduleFlags.commonJs = true;
     
-    if (symbol !== "exports" && symbol !== "module" && options.resolveNodeNativeModules !== false) {
-        parseCommonJsRequire(symbol, file, options, builder);
+    switch (symbol) {
+        case "exports.":
+        case "module.":
+        case "global.":
+            break;
+        case "process.":
+            if (options.resolveNodeNativeModules !== false) {
+                parseCommonJsRequire("process", file, options, builder);
+            }
+            break;
+        case "Buffer":
+            if (options.resolveNodeNativeModules !== false) {
+                parseCommonJsRequire("buffer", file, options, builder);
+            }
+            break;
+        case "setImmediate":
+        case "clearImmediate":
+            if (options.resolveNodeNativeModules !== false) {
+                parseCommonJsRequire("timers", file, options, builder);
+            }
+            break;
     }
     
 }
@@ -786,7 +835,7 @@ function parseImport(url, file, options, builder) {
     
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, true);
-    if (urlObj.isUrl || urlObj.notFound) {
+    if (urlObj.url || !urlObj.path) {
         return false;
     }
     
@@ -859,7 +908,8 @@ function initModuleInfo(file, type) {
  */
 function requireModule(file, targetFile, builder) {
     if (hasModuleRequired(targetFile, file)) {
-        builder.warn("{0}: Circular require with '{1}'", file.srcName, targetFile.srcName);
+        // 允许 require 互相依赖
+        //builder.warn("{0}: Circular require with '{1}'", file.srcName, targetFile.srcName);
         return;
     }
     if (file.moduleRequired.indexOf(targetFile) >= 0) {
@@ -1040,7 +1090,7 @@ function parseUrl(url, file, options, builder, returnContentIfInline) {
     
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, true);
-    if (urlObj.isUrl || urlObj.notFound) {
+    if (urlObj.url || !urlObj.path) {
         return url;
     }
     
@@ -1143,11 +1193,11 @@ function parseInclude(url, file, options, builder) {
     
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, false);
-    if (urlObj.isUrl) {
+    if (urlObj.url) {
         builder.warn("{0}: Cannot include remote file '{1}'", file.srcName, url);
         return;
     }
-    if (urlObj.notFound) {
+    if (!urlObj.path) {
         builder.warn("{0}: Cannot find include file '{1}'", file.srcName, url);
         return; file.flags
     }
@@ -1169,7 +1219,7 @@ function parseExtern(url, file, options, builder) {
     
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, false);
-    if (urlObj.isUrl || urlObj.notFound) {
+    if (urlObj.url || !urlObj.path) {
         return;
     }
     
