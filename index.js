@@ -812,7 +812,7 @@ exports.css = function (file, options, builder) {
                     atImport = parseImport(url, file, options, builder);
                     return all;
                 }
-                return JSON.stringify(parseUrl(url, file, options, builder));
+                return '(' + JSON.stringify(parseUrl(url, file, options, builder)) + ')';
             });
             if (atImport) {
                 return "";
