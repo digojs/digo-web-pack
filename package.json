@@ -1,6 +1,6 @@
 {
     "name": "tpack-assets",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "description": "TPack 解析文件依赖的插件。",
     "repository": {
         "type": "git",
@@ -17,6 +17,7 @@
     "license": "MIT",
     "dependencies": {
         "tpack": "*",
+        "tealweb": "*",
         "node-libs-browser": "*"
     }
 }
