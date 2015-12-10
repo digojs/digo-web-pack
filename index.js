@@ -99,16 +99,16 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
 
     // 相对路径或绝对路径可直接解析。
     if (/^[\.\/]/.test(urlObj.path)) {
-        urlObj.path = findModulePath(file.resolvePath(urlObj.path), extensions);
+        urlObj.path = resolveModulePath(file.resolvePath(urlObj.path), extensions);
     } else if (Path.isAbsolute(urlObj.path)) {
-        urlObj.path = findModulePath(urlObj.path, extensions);
+        urlObj.path = resolveModulePath(urlObj.path, extensions);
     } else {
 
         var path = null;
 
         // 直接单词开头可以表示相对路径，也可以表示全局搜索路径。
         if (!requireMode) {
-            path = findModulePath(file.resolvePath(urlObj.path), extensions);
+            path = resolveModulePath(file.resolvePath(urlObj.path), extensions);
         } else if (options.searchNodeModules !== false || options.nodejs) {
             var dir = file.srcPath;
             while (true) {
@@ -118,7 +118,7 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
                     break;
                 }
 
-                if ((path = findModulePath(Path.join(dir, 'node_modules', urlObj.path), extensions))) {
+                if ((path = resolveModulePath(Path.join(dir, 'node_modules', urlObj.path), extensions))) {
                     break;
                 }
             }
@@ -127,7 +127,7 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
         // 全局搜索路径。
         if (!path && options.paths) {
             for (var i = 0; i < options.paths.length; i++) {
-                if ((path = findModulePath(Path.resolve(options.paths[i], urlObj.path), extensions))) {
+                if ((path = resolveModulePath(Path.resolve(options.paths[i], urlObj.path), extensions))) {
                     break;
                 }
             }
@@ -137,7 +137,7 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
 
     }
 
-    if (reportErrorIfNotFound && !urlObj.path) {
+    if (options.warningModuleNotFound !== false && reportErrorIfNotFound && !urlObj.path) {
         builder.warn(requireMode ? "{0}: Cannot find module '{1}'" : "{0}: Cannot find reference '{1}'", file.srcName, url);
     }
 
@@ -147,7 +147,7 @@ exports.resolveUrl = function (url, file, options, builder, requireMode, reportE
 /**
  * 通过追加后缀的方式尝试搜索模块。
  */
-function findModulePath(path, extensions) {
+function resolveModulePath(path, extensions) {
 
     // 文件已存在，不需要继续搜索。
     if (IO.existsFile(path)) {
@@ -328,6 +328,9 @@ exports.html = function (file, options, builder) {
  * @returns {String} 返回处理后的新内联结果。
  */
 function parseInlined(content, ext, file, options, builder) {
+    if(options.resolveInlined === false) {
+        return content;
+    }
     var file = builder.createFile(file.name + "#inline" + (file._inlineCounter = (file._inlineCounter + 1) || 0) + ext, content);
     builder.processFile(file);
     return file.content;
@@ -343,7 +346,7 @@ function parseInlined(content, ext, file, options, builder) {
  * @returns {String} 返回新的地址。
  */
 function parseDest(startTag, content, file, options, builder) {
-    if (options.resolveUrl === false) {
+    if (options.resolveUrl === false || options.resolveDest === false) {
         return;
     }
 
@@ -356,7 +359,7 @@ function parseDest(startTag, content, file, options, builder) {
     var relatedFile = builder.getFile(builder.getName(file.resolvePath(urlObj.path)));
     relatedFile.content = content;
     relatedFile.save();
-    return buildUrl(relatedFile, urlObj.query, dest, file, options);
+    return buildUrl(relatedFile, urlObj.query, dest, file, options, builder);
 }
 
 function getAttr(html, attrName) {
@@ -731,7 +734,7 @@ function parseAsyncRequire(url, file, options, builder) {
 
     // 生成最终地址。
     var relatedFile = builder.getFile(builder.getName(urlObj.path));
-    return buildUrl(relatedFile, urlObj.query, url, file, options);
+    return buildUrl(relatedFile, urlObj.query, url, file, options, builder);
 }
 
 /**
@@ -1125,6 +1128,9 @@ function parseUrl(url, file, options, builder, returnContentIfInline) {
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, true);
     if (urlObj.url || !urlObj.path) {
+        if(options.buildUrl) {
+            url = options.buildUrl(url, null, file, options, builder) || url;
+        }
         return url;
     }
 
@@ -1148,14 +1154,22 @@ function parseUrl(url, file, options, builder, returnContentIfInline) {
         return relatedFile.getBase64Url();
     }
 
-    return buildUrl(relatedFile, urlObj.query, url, file, options);
+    return buildUrl(relatedFile, urlObj.query, url, file, options, builder);
 }
 
-function buildUrl(relatedFile, query, url, file, options) {
+function buildUrl(relatedFile, query, url, file, options, builder) {
 
     // 追加后缀。
     if (options.appendUrl) {
         query += (query ? '&' : '?') + (typeof options.appendUrl === "function" ? options.appendUrl(url, relatedFile) : relatedFile.formatName(String(options.appendUrl)));
+    }
+
+    // 使用自定义生成地址的方案。
+    if(options.buildUrl) {
+        var url = options.buildUrl(url + query, relatedFile, file, options, builder);
+        if(url) {
+            return url;
+        }
     }
 
     // 返回路径占位符。
@@ -1224,6 +1238,9 @@ function parseComments(comment, file, options, builder) {
  * @returns {String} 返回被包含文件的内容。
  */
 function parseInclude(url, file, options, builder) {
+    if (options.resolveInclude === false) {
+        return;
+    }
 
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, false, false);
@@ -1233,7 +1250,7 @@ function parseInclude(url, file, options, builder) {
     }
     if (!urlObj.path) {
         builder.warn("{0}: Cannot find include file '{1}'", file.srcName, url);
-        return; file.flags
+        return;
     }
 
     // 尝试包含，判断是否存在互嵌套。
@@ -1250,6 +1267,9 @@ function parseInclude(url, file, options, builder) {
  * @param {Builder} builder 当前正在使用的构建器。
  */
 function parseExtern(url, file, options, builder) {
+    if (options.resolveExtern === false) {
+        return;
+    }
 
     // 解析位置。
     var urlObj = exports.resolveUrl(url, file, options, builder, true, false);
@@ -1269,6 +1289,10 @@ function parseExtern(url, file, options, builder) {
  * @param {Builder} builder 当前正在使用的构建器。
  */
 function parseModuleType(type, file, options, builder) {
+    if (options.resolveModuleType === false) {
+        return;
+    }
+    
     type = type.toLowerCase();
     if (type !== "global" && type !== "amd" && type !== "cmd" && type !== "umd" && type !== "commonjs") {
         builder.warn("{0}: Invalid module type: '{1}'. Only 'global', 'cmd', 'amd', 'umd' and 'commonjs' is accepted.", file.name, type);
