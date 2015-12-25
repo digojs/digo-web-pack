@@ -272,24 +272,20 @@ exports.html = function (file, options, builder) {
                 return setAttr(all, "href", parseUrl(src, file, options, builder));
             }
 
-            // <object$>
+            // <object>
             if (/^object$/i.test(tag)) {
                 var src = getAttr(all, "data");
-                if (!src) {
-                    return all;
+                if (src) {
+					all = setAttr(all, "data", parseUrl(src, file, options, builder));
                 }
-                return setAttr(all, "data", parseUrl(src, file, options, builder));
             }
 
-            // <... src>
-            var src = getAttr(all, 'src');
-            if (src) {
-                all = setAttr(all, "src", parseUrl(src, file, options, builder));
-            }
-
-            // <... data-src>
-            if ((src = getAttr(all, 'data-src'))) {
-                all = setAttr(all, "data-src", parseUrl(src, file, options, builder));
+            // <param name="src" value="...">
+            if (/^param$/i.test(tag) && getAttr(all, "name") === "src") {
+                var src = getAttr(all, "value");
+                if (src) {
+					all = setAttr(all, "data", parseUrl(src, file, options, builder));
+                }
             }
 
             // <img srcset>
@@ -303,6 +299,28 @@ exports.html = function (file, options, builder) {
                     });
                     all = setAttr("srcset", srcset);
                 }
+            }
+
+            // <... src>
+            var src = getAttr(all, 'src');
+            if (src) {
+                all = setAttr(all, "src", parseUrl(src, file, options, builder));
+            }
+
+            // <... data-src>
+            if ((src = getAttr(all, 'data-src'))) {
+                all = setAttr(all, "data-src", parseUrl(src, file, options, builder));
+            }
+
+            // <... href>
+            var src = getAttr(all, 'href');
+            if (src) {
+                all = setAttr(all, "href", parseUrl(src, file, options, builder));
+            }
+
+            // <... data-href>
+            if ((src = getAttr(all, 'data-href'))) {
+                all = setAttr(all, "data-href", parseUrl(src, file, options, builder));
             }
 
             return all;
