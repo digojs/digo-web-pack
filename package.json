@@ -1,0 +1,33 @@
+{
+  "name": "digo-web-pack",
+  "version": "0.0.1",
+  "repository": "https://github.com/digojs/digo-web-pack",
+  "description": "digo 插件：Web 模块依赖打包",
+  "keywords": [
+    "module",
+    "commonjs",
+    "requirejs",
+    "web pack"
+  ],
+  "license": "MIT",
+  "author": "xuld <xuld@vip.qq.com>",
+  "main": "./lib/index.js",
+  "typings": "./lib/index.d.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/mocha": "latest",
+    "typescript": "next",
+    "digo": "latest",
+    "mocha": "latest",
+    "source-map-support": "latest",
+    "mime-db": "latest"
+  },
+  "scripts": {
+    "install": "npm run build",
+    "build": "npm run compile && npm run test",
+    "compile": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w",
+    "test": "mocha"
+  }
+}
