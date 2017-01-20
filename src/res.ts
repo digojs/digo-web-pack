@@ -43,16 +43,27 @@ export class ResModule extends Module {
     save(file: digo.File, result?: digo.FileList) { }
 
     /**
-     * 当被子类重写时负责获取当前模块的最终二进制内容。
+     * 获取当前模块的最终二进制内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件缓存。
      */
-    getBuffer() {
+    getBuffer(savePath: string) {
         if (this.srcData != undefined) {
             return this.srcData instanceof Buffer ? this.srcData : digo.stringToBuffer(this.srcData);
         }
-        if (this.srcPath) {
-            return digo.readFile(this.srcPath);
+        if (this.path) {
+            return digo.readFile(this.path);
         }
         return Buffer.allocUnsafe(0);
+    }
+
+    /**
+     * 获取当前模块的最终文本内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件内容。
+     */
+    getContent(savePath: string) {
+
     }
 
     /**
@@ -62,10 +73,28 @@ export class ResModule extends Module {
         if (this.srcData != undefined) {
             return this.getBuffer().length;
         }
-        if (this.srcPath) {
-            return digo.getStat(this.srcPath).size;
+        if (this.path) {
+            return digo.getStat(this.path).size;
         }
         return 0;
+    }
+
+    /**
+     * 获取指定模块的 data URI 地址。
+     * @param module 要获取的模块。
+     * @return 返回编码后的字符串。
+     */
+    protected getBase64Uri(module: Module) {
+        return digo.base64Uri(this.getMimeType(digo.getExt(module.destPath || "")), module.getBuffer(module.destPath || ""));
+    }
+
+    /**
+     * 获取指定扩展名的 MIME 类型。
+     * @param ext 要获取的扩展名。
+     * @return 返回 MIME 类型。
+     */
+    protected getMimeType(ext: string) {
+        return this.options.mimeTypes && this.options.mimeTypes[ext] || getMimeType(ext);
     }
 
 }

@@ -35,6 +35,24 @@ export class TextModule extends Module {
      */
     constructor(packer: Packer, file: digo.File, options?: TextModuleOptions) {
         super(packer, file, options);
+        if (this.options.imports) {
+            for (const path of this.options.imports) {
+                this.require(this.resolvePathInConfig(path), module => {
+                    if (module) {
+                        this.import(module);
+                    }
+                })
+            }
+        }
+        if (this.options.excludes) {
+            for (const path of this.options.excludes) {
+                this.require(this.resolvePathInConfig(path), module => {
+                    if (module) {
+                        this.exclude(module);
+                    }
+                })
+            }
+        }
         this.sourceContent = this.file.content;
         this.sourceMapData = this.file.sourceMapData;
     }
@@ -91,7 +109,7 @@ export class TextModule extends Module {
      * @return 返回文件缓存。
      */
     getBuffer(savePath: string) {
-        return digo.stringToBuffer(this.getContent(this.destPath || this.srcPath || ""));
+        return digo.stringToBuffer(this.getContent(this.destPath || this.path || ""));
     }
 
     /**
@@ -188,7 +206,7 @@ export class TextModule extends Module {
      */
     private writeContent(writer: digo.Writer, savePath: string) {
         if (!this.changes || this.changes.length === 0) {
-            writer.write(this.sourceContent, 0, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
+            writer.write(this.sourceContent, 0, this.sourceContent.length, this.path, 0, 0, this.sourceMapData);
             return;
         }
 
@@ -197,7 +215,7 @@ export class TextModule extends Module {
 
             // 写入上一次替换到这次更新记录中间的普通文本。
             if (p < change.startIndex) {
-                writer.write(this.sourceContent, p, change.startIndex, this.srcPath, 0, 0, this.sourceMapData);
+                writer.write(this.sourceContent, p, change.startIndex, this.path, 0, 0, this.sourceMapData);
             }
 
             // 写入替换的数据。
@@ -213,7 +231,7 @@ export class TextModule extends Module {
 
         // 输出最后一段文本。
         if (p < this.sourceContent.length) {
-            writer.write(this.sourceContent, p, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
+            writer.write(this.sourceContent, p, this.sourceContent.length, this.path, 0, 0, this.sourceMapData);
         }
     }
 
@@ -275,7 +293,7 @@ export class TextModule extends Module {
                     inline = typeof urlOptions.inline === "function" ? urlOptions.inline(urlInfo, this) : urlOptions.inline;
                 }
                 if (typeof inline === "number") {
-                    inline = module.getSize() < inline;
+                    inline = module.getSize("") < inline;
                 }
                 if (inline) {
                     if (!this.include(module)) {
@@ -560,9 +578,9 @@ export class TextModule extends Module {
                     case "now":
                         return new Date().getTime().toString();
                     case "hash":
-                        return url.module ? digo.sha1(url.module.getBuffer()).substr(0, +postfix || 6) : "";
+                        return url.module ? digo.sha1(url.module.getBuffer("")).substr(0, +postfix || 6) : "";
                     case "md5":
-                        return url.module ? digo.md5(url.module.getBuffer()).substr(0, +postfix || 32) : "";
+                        return url.module ? digo.md5(url.module.getBuffer("")).substr(0, +postfix || 32) : "";
                     case "random":
                         return (~~(Math.random() * Math.pow(10, +postfix || 3))).toString();
                 }
@@ -651,6 +669,16 @@ export class TextModule extends Module {
  * 表示解析文本模块的选项。
  */
 export interface TextModuleOptions extends ModuleOptions {
+
+    /**
+     * 手动设置导入项。
+     */
+    imports?: string[];
+
+    /**
+     * 手动设置排除项。
+     */
+    excludes?: string[];
 
     /**
      * 解析地址的配置。

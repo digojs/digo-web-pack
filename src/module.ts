@@ -29,14 +29,9 @@ export abstract class Module {
     readonly options: ModuleOptions;
 
     /**
-     * 获取当前模块的源文件。
+     * 获取当前模块的源路径。
      */
-    readonly srcPath?: string;
-
-    /**
-     * 获取当前模块的保存路径。
-     */
-    readonly destPath?: string;
+    readonly path: string;
 
     /**
      * 初始化一个新的模块。
@@ -48,36 +43,7 @@ export abstract class Module {
         this.packer = packer;
         this.file = file;
         this.options = options || emptyObject!;
-        this.srcPath = file.srcPath;
-        this.destPath = file.destPath;
-        if (this.options.imports) {
-            for (const path of this.options.imports) {
-                this.require(this.resolvePathInConfig(path), module => {
-                    if (module) {
-                        this.import(module);
-                    }
-                })
-            }
-        }
-        if (this.options.excludes) {
-            for (const path of this.options.excludes) {
-                this.require(this.resolvePathInConfig(path), module => {
-                    if (module) {
-                        this.exclude(module);
-                    }
-                })
-            }
-        }
-    }
-
-    /**
-     * 解析配置中指定的路径。
-     * @param base 要解析的基路径。
-     * @param p 要解析的路径。
-     * @return 返回已解析的路径。
-     */
-    protected resolvePathInConfig(base: string, p?: string) {
-        return base.charCodeAt(0) === 46/*.*/ ? path.resolve(this.srcPath || "", base, p || "") : path.resolve(base, p || "");
+        this.path = file.srcPath || path.resolve("_");
     }
 
     // #endregion
@@ -87,7 +53,7 @@ export abstract class Module {
     /**
      * 存储当前模块的所有依赖项。
      */
-    private requires: [string | undefined, (module: Module | null) => void][] = [];
+    private requires: [string | undefined, (module: Module | null) => void][];
 
     /**
      * 存储当前模块是否已解析。
@@ -101,6 +67,7 @@ export abstract class Module {
      */
     protected require(path: string | undefined, callback: (module: Module | null) => void) {
         console.assert(!this.resolved);
+        this.requires = this.requires || [];
         this.requires.push([path, callback]);
     }
 
@@ -109,9 +76,11 @@ export abstract class Module {
      */
     ensure() {
         console.assert(!this.resolved);
-        for (const req of this.requires) {
-            if (req[0]) {
-                this.packer.ensureFile(req[0]!);
+        if (this.requires) {
+            for (const req of this.requires) {
+                if (req[0]) {
+                    this.packer.ensureFile(req[0]!);
+                }
             }
         }
     }
@@ -128,13 +97,15 @@ export abstract class Module {
         this.resolved = true;
 
         // 解析所有依赖项。
-        for (const req of this.requires) {
-            if (req[0]) {
-                const module = this.packer.getModuleFromPath(req[0]!);
-                module.resolve();
-                req[1](module);
-            } else {
-                req[1](null);
+        if (this.requires) {
+            for (const req of this.requires) {
+                if (req[0]) {
+                    const module = this.packer.getModuleFromPath(req[0]!);
+                    module.resolve();
+                    req[1](module);
+                } else {
+                    req[1](null);
+                }
             }
         }
 
@@ -143,60 +114,19 @@ export abstract class Module {
         delete (this as any).file;
     }
 
-    // #endregion
-
-    // #region 生成
-
     /**
-     * 当被子类重写时负责将当前模块生成的内容保存到指定的文件。
-     * @param file 要保存的目标文件。
-     * @param result 要保存的目标列表。
+     * 解析配置中指定的路径。
+     * @param base 要解析的基路径。
+     * @param p 要解析的路径。
+     * @return 返回已解析的路径。
      */
-    abstract save(saveFile: digo.File, result?: digo.FileList);
-
-    /**
-     * 当被子类重写时负责获取当前模块的最终二进制内容。
-     * @param savePath 要保存的目标路径。
-     * @return 返回文件缓存。
-     */
-    abstract getBuffer(savePath: string);
-
-    /**
-     * 当被子类重写时负责获取当前模块的最终文本内容。
-     * @param savePath 要保存的目标路径。
-     * @return 返回文件内容。
-     */
-    getContent(savePath: string) {
-        return this.getBase64Uri(this);
-    }
-
-    /**
-     * 当被子类重写时负责获取当前模块的最终保存大小。
-     * @param savePath 要保存的目标路径。
-     */
-    getSize(savePath: string) { return this.getBuffer(savePath).length; }
-
-    /**
-     * 获取指定模块的 data URI 地址。
-     * @param module 要获取的模块。
-     * @return 返回编码后的字符串。
-     */
-    protected getBase64Uri(module: Module) {
-        return digo.base64Uri(this.getMimeType(digo.getExt(module.destPath || "")), module.getBuffer(module.destPath || ""));
-    }
-
-    /**
-     * 获取指定扩展名的 MIME 类型。
-     * @param ext 要获取的扩展名。
-     * @return 返回 MIME 类型。
-     */
-    protected getMimeType(ext: string) {
-        return this.options.mimeTypes && this.options.mimeTypes[ext] || getMimeType(ext);
+    protected resolvePathInConfig(base: string, p?: string) {
+        return base.charCodeAt(0) === 46/*.*/ ? path.resolve(this.path || "", base, p || "") : path.resolve(base, p || "");
     }
 
     // #endregion
 
-    // #region 依赖公共
+    // #region 依赖
 
     /**
      * 获取当前模块直接包含的所有模块。
@@ -240,8 +170,8 @@ export abstract class Module {
             return false;
         }
         this.includes.push(module);
-        if (module.srcPath) {
-            this.file.dep(module.srcPath, {
+        if (module.path) {
+            this.file.dep(module.path, {
                 source: "WebPack:include"
             });
         }
@@ -257,8 +187,8 @@ export abstract class Module {
             return;
         }
         this.imports.push(module);
-        if (module.srcPath) {
-            this.file.dep(module.srcPath, {
+        if (module.path) {
+            this.file.dep(module.path, {
                 source: "WebPack:import"
             });
         }
@@ -273,8 +203,8 @@ export abstract class Module {
             return;
         }
         this.excludes.push(module);
-        if (module.srcPath) {
-            this.file.dep(module.srcPath, {
+        if (module.path) {
+            this.file.dep(module.path, {
                 source: "WebPack:exclude"
             });
         }
@@ -329,6 +259,49 @@ export abstract class Module {
 
     // #endregion
 
+    // #region 生成
+
+    /**
+     * 当被子类重写时负责将当前模块生成的内容保存到指定的文件。
+     * @param file 要保存的目标文件。
+     * @param result 要保存的目标列表。
+     */
+    abstract save(saveFile: digo.File, result?: digo.FileList);
+
+    /**
+     * 获取当前模块的最终二进制内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件缓存。
+     */
+    getBuffer(savePath: string) {
+        const saveFile = new digo.File(savePath);
+        saveFile.sourceMap = false;
+        this.save(saveFile);
+        return saveFile.buffer;
+    }
+
+    /**
+     * 获取当前模块的最终文本内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件内容。
+     */
+    getContent(savePath: string) {
+        const saveFile = new digo.File(savePath);
+        saveFile.sourceMap = false;
+        this.save(saveFile);
+        return saveFile.content;
+    }
+
+    /**
+     * 获取当前模块的最终保存大小。
+     * @param savePath 要保存的目标路径。
+     */
+    getSize(savePath: string) {
+        return this.getBuffer(savePath).length;
+    }
+
+    // #endregion
+
 }
 
 export default Module;
@@ -337,16 +310,6 @@ export default Module;
  * 表示模块解析的选项。
  */
 export interface ModuleOptions {
-
-    /**
-     * 手动设置导入项。
-     */
-    imports?: string[];
-
-    /**
-     * 手动设置排除项。
-     */
-    excludes?: string[];
 
     /**
      * 设置每个扩展名对应的 MIME 类型。
