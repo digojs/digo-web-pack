@@ -24,7 +24,7 @@ export abstract class Module {
     readonly file: digo.File;
 
     /**
-     * 获取当前模块的解析选项。
+     * 获取当前模块的选项。
      */
     readonly options: ModuleOptions;
 
@@ -152,7 +152,7 @@ export abstract class Module {
      * @param file 要保存的目标文件。
      * @param result 要保存的目标列表。
      */
-    abstract save(saveFile: digo.File, result: digo.FileList);
+    abstract save(saveFile: digo.File, result?: digo.FileList);
 
     /**
      * 当被子类重写时负责获取当前模块的最终二进制内容。
