@@ -35,6 +35,11 @@ export class ResModule extends Module {
     }
 
     /**
+     * 当被子类重写时负责解析当前模块。
+     */
+    parse() { }
+
+    /**
      * 当被子类重写时负责将当前模块生成的内容保存到指定的文件。
      * @param file 要保存的目标文件。
      * @param result 要保存的目标列表。
@@ -46,16 +51,18 @@ export class ResModule extends Module {
      * @param savePath 要保存的目标路径。
      * @return 返回文件缓存。
      */
-    getBuffer(savePath: string) {
+    getBuffer(savePath = this.destPath) {
         if (this.srcData != undefined) {
             return this.srcData instanceof Buffer ? this.srcData : digo.stringToBuffer(this.srcData);
         }
-        try {
-            return digo.readFile(this.srcPath);
-        } catch (e) {
-            digo.verbose(e);
-            return Buffer.allocUnsafe(0);
+        if (this.srcPath != undefined) {
+            try {
+                return digo.readFile(this.srcPath);
+            } catch (e) {
+                digo.verbose(e);
+            }
         }
+        return Buffer.allocUnsafe(0);
     }
 
     /**
@@ -63,30 +70,32 @@ export class ResModule extends Module {
      * @param savePath 要保存的目标路径。
      * @return 返回文件内容。
      */
-    getContent(savePath: string) {
+    getContent(savePath = this.destPath) {
         if (typeof this.srcData === "string") {
             return this.srcData;
         }
         if (this.options.type === "text" || this.options.type === "js" || this.options.type === "css" || this.options.type === "json") {
             return this.getBuffer(savePath).toString();
         }
-        return digo.base64Uri(this.options.mimeType || this.packer.getMimeType(digo.getExt(this.destPath || "")), this.getBuffer(savePath));
+        return this.getBase64Uri(savePath);
     }
 
     /**
      * 获取当前模块的最终保存大小。
      * @param savePath 要保存的目标路径。
      */
-    getSize(savePath: string) {
+    getSize(savePath = this.destPath) {
         if (this.srcData != undefined) {
             return this.getBuffer(savePath).length;
         }
-        try {
-            return digo.getStat(this.srcPath).size;
-        } catch (e) {
-            digo.verbose(e);
-            return 0;
+        if (this.srcPath != undefined) {
+            try {
+                return digo.getStat(this.srcPath).size;
+            } catch (e) {
+                digo.verbose(e);
+            }
         }
+        return 0;
     }
 
 }
@@ -100,10 +109,5 @@ export interface ResModuleOptions extends ModuleOptions {
      * 资源类型。
      */
     type?: string;
-
-    /**
-     * 当前资源的 MIME 类型。
-     */
-    mimeType?: string;
 
 }

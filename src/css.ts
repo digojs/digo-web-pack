@@ -5,7 +5,7 @@
 import * as digo from "digo";
 import { Packer } from "./packer";
 import { Module } from "./module";
-import { TextModule, TextModuleOptions, UrlUsage, UrlInfo } from "./text";
+import { TextModule, TextModuleOptions, UrlInfo } from "./text";
 
 /**
  * 表示一个 CSS 模块。
@@ -25,7 +25,13 @@ export class CssModule extends TextModule {
      */
     constructor(packer: Packer, file: digo.File, options?: CssModuleOptions) {
         super(packer, file, options);
-        file.content.replace(/\/\*([\s\S]*?)(?:\*\/|$)|((?:@import\s+url|\burl)\s*\(\s*)("((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|[^\)\n\r]*)\s*\)\s*;?/g, (matchSource: string, comment: string | undefined, urlPrefix: string | undefined, urlString: string | undefined, urlDoubleString: string | undefined, urlSingleString: string | undefined, matchIndex: number) => {
+    }
+
+    /**
+     * 当被子类重写时负责解析当前模块。
+     */
+    parse() {
+        this.file.content.replace(/\/\*([\s\S]*?)(?:\*\/|$)|((?:@import\s+url|\burl)\s*\(\s*)("((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|[^\)\n\r]*)\s*\)\s*;?/g, (matchSource: string, comment: string | undefined, urlPrefix: string | undefined, urlString: string | undefined, urlDoubleString: string | undefined, urlSingleString: string | undefined, matchIndex: number) => {
 
             // /* ... */
             if (comment != undefined) {
@@ -70,7 +76,7 @@ export class CssModule extends TextModule {
             return;
         }
         if (importOptions == undefined || importOptions === "inline") {
-            const urlInfo: UrlInfo = this.resolveUrl(arg, argIndex, url, "inline");
+            const urlInfo: UrlInfo = this.resolveUrl(arg, argIndex, url, "relative");
             const query = this.getAndRemoveQuery(urlInfo, "__inline");
             if (query === undefined || query === "true") {
                 if (urlInfo.resolved) {
@@ -82,8 +88,8 @@ export class CssModule extends TextModule {
                 return;
             }
         }
-        this.parseUrl(arg, argIndex, url, "css.import", url => this.encodeString(url, quote), (urlInfo, module) => {
-            this.import(module);
+        this.parseUrl(arg, argIndex, url, "css.import", url => this.encodeString(url, quote), urlInfo => {
+            this.import(urlInfo.module!);
             this.addChange(source, sourceIndex, "");
         });
     }

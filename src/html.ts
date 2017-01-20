@@ -25,7 +25,13 @@ export class HtmlModule extends TextModule {
      */
     constructor(packer: Packer, file: digo.File, options?: TextModuleOptions) {
         super(packer, file, options);
-        file.content.replace(/<!--([\s\S]*?)(?:-->|$)|<!\[CDATA\[([\s\S*]*?)(?:\]\]>|$)|<%([\s\S*]*?)(?:%>|$)|<\?([\s\S*]*?)(?:\?>|$)|(<script\b(?:'[^']*'|"[^"]*"|[^>])*>)([\s\S]*?)(?:<\/script(?:'[^']*'|"[^"]*"|[^>])*>|$)|(<style\b(?:'[^']*'|"[^"]*"|[^>])*>)([\s\S]*?)(?:<\/style(?:'[^']*'|"[^"]*"|[^>])*>|$)|<([^\s'"]+)\b(?:'[^']*'|"[^"]*"|[^>])*>/ig, (matchSource: string, comment: string | undefined, cdata: string | undefined, asp: string | undefined, php: string | undefined, openScript: string | undefined, script: string | undefined, openStyle: string | undefined, style: string | undefined, tag: string | undefined, matchIndex: number) => {
+    }
+
+    /**
+     * 当被子类重写时负责解析当前模块。
+     */
+    parse() {
+        this.file.content.replace(/<!--([\s\S]*?)(?:-->|$)|<!\[CDATA\[([\s\S*]*?)(?:\]\]>|$)|<%([\s\S*]*?)(?:%>|$)|<\?([\s\S*]*?)(?:\?>|$)|(<script\b(?:'[^']*'|"[^"]*"|[^>])*>)([\s\S]*?)(?:<\/script(?:'[^']*'|"[^"]*"|[^>])*>|$)|(<style\b(?:'[^']*'|"[^"]*"|[^>])*>)([\s\S]*?)(?:<\/style(?:'[^']*'|"[^"]*"|[^>])*>|$)|<([^\s'"]+)\b(?:'[^']*'|"[^"]*"|[^>])*>/ig, (matchSource: string, comment: string | undefined, cdata: string | undefined, asp: string | undefined, php: string | undefined, openScript: string | undefined, script: string | undefined, openStyle: string | undefined, style: string | undefined, tag: string | undefined, matchIndex: number) => {
 
             // <img>, <link>, ...
             if (tag != undefined) {
@@ -105,22 +111,22 @@ export class HtmlModule extends TextModule {
                     break;
                 case "script-url":
                     skipInnerHTML = true;
-                    this.parseUrl(attrValue, attrValueIndex, value, "html.tag", url => this.formatAttrValue(url, attrString), (urlInfo, module) => {
+                    this.parseUrl(attrValue, attrValueIndex, value, "html.tag", url => this.formatAttrValue(url, attrString), urlInfo => {
                         // 删除 "lang=..."
-                        if (langAttr && langAttr.value !== "text/javascript" && /\.js$/i.test(module.destPath!)) {
+                        if (langAttr && langAttr.value !== "text/javascript" && /\.js$/i.test(urlInfo.module!.destPath!)) {
                             this.addChange(langAttr.source, langAttr.sourceIndex, "");
                         }
                         // 删除 "src=..."
                         this.addChange(matchSource, sourceIndex + matchIndex, "");
                         // ">" => ">..."
-                        this.addChange("", sourceIndex + source.length, savePath => module.getContent(savePath));
+                        this.addChange("", sourceIndex + source.length, savePath => urlInfo.module!.getContent(savePath));
                     });
                     break;
                 case "style-url":
                     skipInnerHTML = true;
-                    this.parseUrl(attrValue, attrValueIndex, value, "html.tag", url => this.formatAttrValue(url, attrString), (urlInfo, module) => {
+                    this.parseUrl(attrValue, attrValueIndex, value, "html.tag", url => this.formatAttrValue(url, attrString), urlInfo => {
                         // 删除 "lang=..."
-                        if (langAttr && langAttr.value !== "text/css" && /\.css$/i.test(module.destPath!)) {
+                        if (langAttr && langAttr.value !== "text/css" && /\.css$/i.test(urlInfo.module!.destPath!)) {
                             this.addChange(langAttr.source, langAttr.sourceIndex, "");
                         }
                         if (tagName === "link") {
@@ -134,15 +140,15 @@ export class HtmlModule extends TextModule {
                                 this.addChange(matchSource, sourceIndex + matchIndex, "");
                                 // "/>" => ">...</style>"
                                 const end = /\s*\/?>$/.exec(source)!;
-                                this.addChange(end[0], sourceIndex + end.index, savePath => ">" + module.getContent(savePath) + "</style>");
+                                this.addChange(end[0], sourceIndex + end.index, savePath => ">" + urlInfo.module!.getContent(savePath) + "</style>");
                             } else {
-                                this.addChange(attrValue, attrValueIndex, savePath => this.formatAttrValue(module.getContent(savePath), attrString));
+                                this.addChange(attrValue, attrValueIndex, savePath => this.formatAttrValue(urlInfo.module!.getBase64Uri(savePath), attrString));
                             }
                         } else {
                             // 删除 "href=..."
                             this.addChange(matchSource, sourceIndex + matchIndex, "");
                             // ">" => ">..."
-                            this.addChange("", sourceIndex + source.length, savePath => module.getContent(savePath));
+                            this.addChange("", sourceIndex + source.length, savePath => urlInfo.module!.getContent(savePath));
                         }
                     });
                     break;
@@ -168,7 +174,7 @@ export class HtmlModule extends TextModule {
 
         // 解析内联内容。
         if (innerHTML != undefined && !skipInnerHTML && this.attrType(source, sourceIndex, tagName, "innerHTML")) {
-            this.parseContent(innerHTML, innerHTMLIndex!, innerHTML, langAttr ? langAttr.ext : this.getExtOfLang(tagName), content => content.replace(/<\/(script|style)>/g, "<\\u002f$1>"), (module) => {
+            this.parseContent(innerHTML, innerHTMLIndex!, innerHTML, langAttr ? langAttr.ext : this.getExtOfLang(tagName), content => content.replace(/<\/(script|style)>/g, "<\\u002f$1>"), module => {
                 if (langAttr && langAttr.value !== (tagName === "style" ? "text/css" : "text/javascript") && (tagName === "style" ? /\.js$/i : /\.css$/i).test(module.destPath!)) {
                     // 删除 "lang=..."
                     this.addChange(langAttr.source, langAttr.sourceIndex, "");
@@ -233,7 +239,7 @@ export class HtmlModule extends TextModule {
      * @return 返回扩展名。
      */
     protected getExtOfLang(lang: string) {
-        return this.options.langs && this.options.langs[lang] || defaultLangs[lang] || lang.replace(/\^.*\//, "");
+        return this.options.langs && this.options.langs[lang] || defaultLangs[lang] || this.packer.getExtByMimeType(lang) || lang.replace(/\^.*\//, "");
     }
 
     /**
@@ -292,7 +298,7 @@ export class HtmlModule extends TextModule {
      * @param modules 依赖的所有模块。
      * @param extracts 导出的所有文件。
      */
-    protected write(writer: digo.Writer, savePath: string, modules: Module[], extracts: digo.File[]) {
+    write(writer: digo.Writer, savePath: string, modules: Module[], extracts: digo.File[]) {
         super.writeModule(writer, this, savePath, modules, extracts);
     }
 
@@ -505,7 +511,5 @@ const defaultLangs = {
     "text/javascript": ".js",
     "text/style": ".css",
     "text/plain": ".txt",
-    "text/template": ".inc",
-    "text/jscript": ".js",
-    "text/vbscript": ".vbs",
+    "text/template": ".inc"
 };

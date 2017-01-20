@@ -2,10 +2,11 @@
  * @file JS 模块
  * @author xuld <xuld@vip.qq.com>
  */
+import * as path from "path";
 import * as digo from "digo";
 import { Packer } from "./packer";
-import { Module } from "./module";
-import { TextModule, TextModuleOptions, UrlUsage, UrlInfo } from "./text";
+import { Module, emptyObject } from "./module";
+import { TextModule, TextModuleOptions, UrlType, UrlInfo } from "./text";
 import { CssModule } from "./css";
 import { HtmlModule } from "./html";
 import { ResModule } from "./res";
@@ -33,7 +34,14 @@ export class JsModule extends TextModule {
      */
     constructor(packer: Packer, file: digo.File, options?: JsModuleOptions) {
         super(packer, file, options);
-        file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
+        this.commonjs = !!(this.options.require && this.options.require.commonjs);
+    }
+
+    /**
+     * 当被子类重写时负责解析当前模块。
+     */
+    parse() {
+        this.file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
 
             // "...", '...'
             if (doubleString != undefined || singleString != undefined) {
@@ -62,7 +70,6 @@ export class JsModule extends TextModule {
 
             return "";
         });
-
     }
 
     /**
@@ -75,11 +82,11 @@ export class JsModule extends TextModule {
      */
     protected parseRequire(source: string, sourceIndex: number, arg: string, argIndex: number, url: string) {
         this.commonjs = true;
-        const urlInfo = this.resolveUrl(arg, argIndex, url, "require");
+        const urlInfo = this.resolveUrl(arg, argIndex, url, "node");
         if (urlInfo.resolved) {
             this.require(urlInfo.resolved, (module: Module) => {
                 this.import(module);
-                const url = this.getModuleName(module) || digo.relativePath(digo.getDir(this.srcPath || ""), module.srcPath).replace(/^[^\.]/, "./$&");
+                const url = this.getModuleName(module) || digo.relativePath(digo.getDir(this.destPath || "_"), module.destPath).replace(/^[^\.]/, "./$&");
                 this.addChange(arg, argIndex, this.encodeString(url));
             });
         }
@@ -135,44 +142,59 @@ export class JsModule extends TextModule {
     }
 
     /**
-     * 确保当前模块及依赖都已解析。
-     */
-    resolve() {
-        super.resolve();
-
-        // 导出 css
-
-    }
-
-    /**
      * 当被子类重写时负责将当前模块的内容写入到指定的写入器。
      * @param writer 要写入的目标写入器。
      * @param savePath 要保存的目标路径。
+     * @param modules 依赖的所有模块。
+     * @param extracts 导出的所有文件。
      */
-    protected write(writer: digo.Writer, savePath: string) {
+    write(writer: digo.Writer, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
         if (!this.commonjs) {
-            super.writeModule(writer, this, savePath);
+            super.writeModule(writer, this, savePath, modules, extracts);
             return;
         }
-        const requireOptions = this.options.require;
-        const loader = requireOptions && requireOptions.loader != undefined ? requireOptions.loader : !this.excludes.length;
+        const requireOptions = this.options.require || emptyObject!;
+        if (requireOptions.extractCss) {
+            const cssModules: CssModule[] = [];
+            for (let i = 0; i < modules.length; i++) {
+                if (modules[i] instanceof CssModule) {
+                    cssModules.push(modules[i] as CssModule);
+                    modules.splice(i--, 1);
+                }
+            }
+            if (cssModules.length) {
+                const cssPath = savePath != undefined ? path.resolve(savePath, "..", requireOptions.extractCss === true ? "__name.css" : requireOptions.extractCss).replace("__name", digo.getFileName(savePath, false)) : undefined;
+                const cssFile = new digo.File(cssPath);
+                const cssWriter = cssFile.createWriter(this.options.output);
+                if (cssPath != undefined) {
+                    const existsModule = this.packer.getModuleByPath(cssPath);
+                    if (existsModule instanceof CssModule) {
+                        cssModules.push(existsModule);
+                    }
+                }
+                cssModules[cssModules.length - 1].write(cssWriter, cssPath, cssModules, []);
+                cssWriter.end();
+                extracts.push(cssFile);
+            }
+        }
+        const loader = requireOptions.loader != undefined ? requireOptions.loader : !this.excludes.length;
         if (loader === true) {
             writer.write(this.getLoader());
         } else if (typeof loader === "string") {
             writer.write(loader);
         }
-        super.write(writer, savePath);
-        const modulePath = this.getModuleName(this) || digo.relativePath(this.srcPath || "");
-        const libraryTarget = requireOptions && requireOptions.libraryTarget || "var";
+        super.write(writer, savePath, modules, extracts);
+        const modulePath = this.getModuleName(this) || digo.relativePath(this.destPath || "");
+        const libraryTarget = requireOptions.libraryTarget || "var";
         switch (libraryTarget) {
             case "var":
-                writer.write(`\n\nvar ${requireOptions && requireOptions.variable || "exports"} = digo.require(${JSON.stringify(modulePath)});`);
+                writer.write(`\n\nvar ${requireOptions.variable || "exports"} = digo.require(${JSON.stringify(modulePath)});`);
                 break;
             case "this":
-                writer.write(`\n\nthis[${JSON.stringify(requireOptions && requireOptions.variable || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
+                writer.write(`\n\nthis[${JSON.stringify(requireOptions.variable || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
                 break;
             case "exports":
-                writer.write(`\n\nexports[${JSON.stringify(requireOptions && requireOptions.variable || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
+                writer.write(`\n\nexports[${JSON.stringify(requireOptions.variable || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
                 break;
             case "commonjs":
                 writer.write(`\n\nmodule.exports = digo.require(${JSON.stringify(modulePath)});`);
@@ -187,7 +209,7 @@ export class JsModule extends TextModule {
     } else if (typeof define === 'function' && define.amd) {
         define(factory);
     } else {
-        root[${JSON.stringify(requireOptions && requireOptions.variable || "exports")}] = factory();
+        root[${JSON.stringify(requireOptions.variable || "exports")}] = factory();
     }
 }(this, function factory() {
     return digo.require(${JSON.stringify(modulePath)}); });;
@@ -201,19 +223,21 @@ export class JsModule extends TextModule {
      * @param writer 要写入的目标写入器。
      * @param module 要写入的模块列表。
      * @param savePath 要保存的目标路径。
+     * @param modules 依赖的所有模块。
+     * @param extracts 导出的所有文件。
      */
-    protected writeModule(writer: digo.Writer, module: Module, savePath: string) {
-        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module) || digo.relativePath(module.srcPath || ""))}, function (require, exports, module) {\n`)
+    protected writeModule(writer: digo.Writer, module: Module, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
+        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module) || digo.relativePath(module.destPath || ""))}, function (require, exports, module) {\n`)
         writer.indent();
         if (module instanceof JsModule) {
-            super.writeModule(writer, module, savePath);
-        } else if (module instanceof CssModule || (module instanceof ResModule && module.type === "css")) {
+            super.writeModule(writer, module, savePath, modules, extracts);
+        } else if (module instanceof CssModule || (module instanceof ResModule && module.options.type === "css")) {
             writer.write(`module.exports = digo.style(${JSON.stringify(module.getContent(savePath))});`);
-        } else if (module instanceof HtmlModule || module instanceof TextModule as any || (module instanceof ResModule && module.type === "text") || (module instanceof ResModule && module.type === "html")) {
+        } else if (module instanceof HtmlModule || module instanceof TextModule || module instanceof ResModule && module.options.type === "text") {
             writer.write(`module.exports = ${JSON.stringify(module.getContent(savePath))};`);
-        } else if (module instanceof ResModule && module.type === "json") {
+        } else if (module instanceof ResModule && module.options.type === "json") {
             writer.write(`module.exports = ${module.getContent(savePath)};`);
-        } else if (module instanceof ResModule && module.type === "js") {
+        } else if (module instanceof ResModule && module.options.type === "js") {
             writer.write(`${module.getContent(savePath)};`);
         } else {
             writer.write(`module.exports = ${JSON.stringify(module.getContent(savePath))};`);
@@ -266,6 +290,11 @@ export interface JsModuleOptions extends TextModuleOptions {
      * require 相关的配置。
      */
     require?: {
+
+        /**
+         * 是否强制使所有模块都作为 Commonjs 模块处理。
+         */
+        commonjs?: boolean;
 
         /**
          * 模块的跟路径。

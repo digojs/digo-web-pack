@@ -5,6 +5,7 @@ describe("html", function () {
 
     it("basic", function () {
         assert.equal(buildHtml('<img/>'), '<img/>');
+        debugger
         assert.equal(buildHtml('<img src="ref.jpg" />'), '<img src="ref.jpg" />');
     });
 

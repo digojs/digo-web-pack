@@ -124,7 +124,7 @@ export class Packer {
                     this.setModule(file, module = this.createDefaultModule(file));
                 }
                 if (this._allFileAdded) {
-                    module.ensure();
+                    module.parse();
                 }
                 this.asyncQueue.unlock("loadFile");
             }
@@ -182,7 +182,7 @@ export class Packer {
      * @param path 要获取的绝对路径。
      * @return 返回模块对象。
      */
-    getModuleFromPath(path: string) {
+    getModuleByPath(path: string) {
         return this.modules[path!.toLowerCase()]!;
     }
 
@@ -201,7 +201,7 @@ export class Packer {
 
             // 解析每个入口模块的依赖，并递归解析。
             for (const file of this.files) {
-                this.getModule(file).ensure();
+                this.getModule(file).parse();
             }
         });
 
@@ -291,7 +291,7 @@ export class Packer {
             case ".template":
                 return new ResModule(this, file, "text");
             default:
-                const mimeType = getMimeType(file.ext);
+                const mimeType = this.getMimeTypeByExt(file.ext);
                 return new ResModule(this, file, /^image/.test(mimeType) ? "image" : /^application\/font/.test(mimeType) ? "font" : mimeType.replace(/\/.*$/, ""));
         }
     }
@@ -310,7 +310,7 @@ export class Packer {
             const db = require("mime-db");
             for (const mimeType in db) {
                 for (const extension of db[mimeType].extensions || []) {
-                    this._mimeTypes[extension] = mimeType;
+                    this._mimeTypes["." + extension] = mimeType;
                 }
             }
         }
@@ -329,9 +329,22 @@ export class Packer {
      * @param ext 要获取的扩展名。
      * @return 返回 MIME 类型。
      */
-    getMimeType(ext: string | undefined) {
+    getMimeTypeByExt(ext: string | undefined) {
         ext = ext || "";
         return this.mimeTypes[ext.toLowerCase()] || "application/" + ext.replace('.', "");
+    }
+
+    /**
+     * 从 MIME 数据库获取 MIME 类型。
+     * @param ext 要获取的MIME 类型。
+     * @return 返回扩展名。
+     */
+    getExtByMimeType(mimeType: string) {
+        for (const ext in this.mimeTypes) {
+            if (this.mimeTypes[ext] === mimeType) {
+                return ext;
+            }
+        }
     }
 
     /**

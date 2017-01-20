@@ -18,14 +18,14 @@ export class TextModule extends Module {
     readonly options: TextModuleOptions;
 
     /**
-     * 存储当前模块的源内容。
+     * 获取当前模块的源内容。
      */
-    protected sourceContent: string;
+    protected readonly sourceContent: digo.File["content"];
 
     /**
      * 获取当前模块的源映射。
      */
-    protected sourceMapData: digo.SourceMapData;
+    protected readonly sourceMapData: digo.File["sourceMapData"];
 
     /**
      * 初始化一个新的模块。
@@ -35,32 +35,45 @@ export class TextModule extends Module {
      */
     constructor(packer: Packer, file: digo.File, options?: TextModuleOptions) {
         super(packer, file, options);
-        if (this.options.imports) {
-            for (const path of this.options.imports) {
-                this.require(this.resolvePathInConfig(path), module => {
-                    if (module) {
-                        this.import(module);
-                    }
-                })
-            }
-        }
-        if (this.options.excludes) {
-            for (const path of this.options.excludes) {
-                this.require(this.resolvePathInConfig(path), module => {
-                    if (module) {
-                        this.exclude(module);
-                    }
-                })
-            }
-        }
         this.sourceContent = this.file.content;
         this.sourceMapData = this.file.sourceMapData;
     }
 
     /**
+     * 当被子类重写时负责解析当前模块。
+     */
+    parse() {
+        this.parseSubs(this.sourceContent, 0);
+    }
+
+    /**
      * 获取当前模块的替换列表。
      */
-    protected changes: Change[] = [];
+    protected readonly changes: Change[] = [];
+
+    /**
+     * 判断指定的区域是否存在更改记录。
+     * @param source 要替换的源。
+     * @param sourceIndex *source* 在源文件的起始位置。
+     * @returns 如果存在则返回 true，否则返回 false。
+     */
+    protected hasChange(source: string, sourceIndex: number) {
+        // FIXME: 是否需要改进为二分搜索?
+        for (let i = 0; i < this.changes.length; i++) {
+            const change = this.changes[i];
+            if (change.endIndex <= sourceIndex) {
+                continue;
+            }
+            if (change.startIndex <= sourceIndex) {
+                return true;
+            }
+            if (sourceIndex + source.length <= change.startIndex) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
 
     /**
      * 添加一个更改记录。
@@ -91,10 +104,10 @@ export class TextModule extends Module {
      */
     save(file: digo.File, result?: digo.FileList) {
         this.resolve();
-        const writer = file.createWriter(this.options.output);
         const modules = this.getModuleList();
         const extracts = [];
-        this.write(writer, file.path || path.resolve("_"), modules, extracts);
+        const writer = file.createWriter(this.options.output);
+        this.write(writer, file.path, modules, extracts);
         writer.end();
         if (result && extracts.length) {
             for (const file of extracts) {
@@ -110,28 +123,26 @@ export class TextModule extends Module {
      * @param modules 依赖的所有模块。
      * @param extracts 导出的所有文件。
      */
-    protected write(writer: digo.Writer, savePath: string, modules: Module[], extracts: digo.File[]) {
+    write(writer: digo.Writer, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
         const outputOptions = this.options.output! || emptyObject;
+        if (outputOptions.prepend) {
+            writer.write(this.replaceVariable(outputOptions.prepend, this));
+        }
         for (let i = 0; i < modules.length; i++) {
             const module = modules[i];
-
-            // 写入模块分隔符。
             if (i > 0 && outputOptions.seperator !== "") {
                 writer.write(outputOptions.seperator || "\n\n");
             }
-
-            // 写入模块头。
             if (outputOptions.modulePrepend) {
-                writer.write(this.replaceVariable(outputOptions.modulePrepend, module, savePath));
+                writer.write(this.replaceVariable(outputOptions.modulePrepend, module));
             }
-
-            // 写入模块。
             this.writeModule(writer, module, savePath, modules, extracts);
-
-            // 写入模块尾。
             if (outputOptions.moduleAppend) {
-                writer.write(this.replaceVariable(outputOptions.moduleAppend, module, savePath));
+                writer.write(this.replaceVariable(outputOptions.moduleAppend, module));
             }
+        }
+        if (outputOptions.append) {
+            writer.write(this.replaceVariable(outputOptions.append, this));
         }
     }
 
@@ -143,7 +154,7 @@ export class TextModule extends Module {
      * @param modules 依赖的所有模块。
      * @param extracts 导出的所有文件。
      */
-    protected writeModule(writer: digo.Writer, module: Module, savePath: string, modules: Module[], extracts: digo.File[]) {
+    protected writeModule(writer: digo.Writer, module: Module, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
         if (module instanceof TextModule) {
             module.writeContent(writer, savePath);
         } else {
@@ -156,7 +167,7 @@ export class TextModule extends Module {
      * @param writer 要写入的目标写入器。
      * @param savePath 要保存的目标路径。
      */
-    private writeContent(writer: digo.Writer, savePath: string) {
+    private writeContent(writer: digo.Writer, savePath: string | undefined) {
         if (!this.changes || this.changes.length === 0) {
             writer.write(this.sourceContent, 0, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
             return;
@@ -193,7 +204,10 @@ export class TextModule extends Module {
      * @param module 当前的模块内容。
      * @return 返回已替换的内容。
      */
-    protected replaceVariable(value: string, module: Module, savePath: string) {
+    protected replaceVariable(value: string | ((module: Module, owner: Module) => string), module: Module) {
+        if (typeof value === "function") {
+            return value(module, this);
+        }
         return value.replace(/__(date|time|path|name|ext)/g, (all, word: string) => {
             switch (word) {
                 case "date":
@@ -201,11 +215,11 @@ export class TextModule extends Module {
                 case "time":
                     return digo.formatDate(this.packer.date, "yyyy/MM/dd HH:mm:ss");
                 case "path":
-                    return digo.relativePath(savePath);
+                    return module.srcPath ? digo.relativePath(module.srcPath) : "";
                 case "name":
-                    return digo.getFileName(savePath);
+                    return module.srcPath ? digo.getFileName(module.srcPath) : "";
                 case "ext":
-                    return digo.getExt(savePath);
+                    return module.srcPath ? digo.getExt(module.srcPath) : "";
                 default:
                     return word;
             }
@@ -223,9 +237,9 @@ export class TextModule extends Module {
      * @param formater 自定义编码地址的函数。
      * @param inliner 自定义内联文件的函数。
      */
-    protected parseUrl(source: string, sourceIndex: number, url: string, name: string, formater?: (url: string) => string, inliner?: (url: UrlInfo, module: Module) => void) {
+    protected parseUrl(source: string, sourceIndex: number, url: string, name: string, formater?: (url: string) => string, inliner?: (url: UrlInfo) => void) {
         const urlOptions = this.options.url! || emptyObject;
-        const urlInfo: UrlInfo = this.resolveUrl(source, sourceIndex, url, "inline");
+        const urlInfo: UrlInfo = this.resolveUrl(source, sourceIndex, url, "relative");
         this.require(urlInfo.resolved, module => {
 
             // 处理内联。
@@ -245,21 +259,22 @@ export class TextModule extends Module {
                     inline = typeof urlOptions.inline === "function" ? urlOptions.inline(urlInfo, this) : urlOptions.inline;
                 }
                 if (typeof inline === "number") {
-                    inline = module.getSize("") < inline;
+                    inline = module.getSize() < inline;
                 }
                 if (inline) {
                     if (!this.include(module)) {
                         this.log(source, sourceIndex, "Cannot inline {resolved} due to circular include", urlInfo, digo.LogLevel.error);
                     } else {
                         if (inliner) {
-                            inliner(urlInfo, module);
+                            inliner(urlInfo);
                         } else {
+                            // FIXME: 需要延时计算 base64 地址?
                             this.addChange(source, sourceIndex, savePath => {
-                                let base64Uri = module.getContent(savePath);
+                                let result = module.getBase64Uri(savePath);
                                 if (formater) {
-                                    base64Uri = formater(base64Uri);
+                                    result = formater(result);
                                 }
-                                return base64Uri;
+                                return result;
                             });
                         }
                         return;
@@ -278,25 +293,25 @@ export class TextModule extends Module {
 
             // 格式化地址。
             this.addChange(source, sourceIndex, savePath => {
-                let formated: string | undefined | null;
+                let result: string | undefined | null;
                 if (urlOptions.format) {
-                    formated = urlOptions.format(urlInfo, this, savePath);
+                    result = urlOptions.format(urlInfo, this, savePath);
                 }
-                if (formated == undefined) {
+                if (result == undefined) {
                     if (urlInfo.resolved) {
-                        formated = this.replacPrefix(urlOptions.public, digo.relativePath(urlInfo.resolved));
+                        result = this.replacPrefix(urlOptions.public, digo.relativePath(urlInfo.resolved));
                     }
-                    if (formated !== null && urlInfo.module && urlInfo.module.destPath) {
-                        formated = digo.relativePath(digo.getDir(savePath), urlInfo.module.destPath);
+                    if (result !== null && urlInfo.module && urlInfo.module.destPath != undefined && savePath != undefined) {
+                        result = digo.relativePath(digo.getDir(savePath), urlInfo.module.destPath);
                     } else {
-                        formated = urlInfo.path;
+                        result = urlInfo.path;
                     }
-                    formated += urlInfo.query;
+                    result += urlInfo.query;
                 }
                 if (formater) {
-                    formated = formater(formated);
+                    result = formater(result);
                 }
-                return savePath;
+                return result;
             });
         });
     }
@@ -306,22 +321,22 @@ export class TextModule extends Module {
      * @param source 相关的代码片段。
      * @param sourceIndex *source* 在源文件的起始位置。
      * @param url 要解析的地址。
-     * @param usage 地址的使用位置。
+     * @param defaultType 地址默认的解析方式。
      * @return 返回一个地址信息对象。
      */
-    protected resolveUrl(source: string, sourceIndex: number, url: string, usage: UrlUsage) {
+    protected resolveUrl(source: string, sourceIndex: number, url: string, defaultType: UrlType) {
         const resolveOptions = this.options.resolve! || emptyObject;
         const qi = url.search(/[?#]/);
         const result: ResolveUrlResult = qi >= 0 ? { path: url.substr(0, qi), query: url.substr(qi) } : { path: url, query: "" };
 
         // 允许忽略个别地址。
-        if (this.getAndRemoveQuery(result, "__ignore") === "true" || resolveOptions.before && resolveOptions.before(result, this, usage) === false) {
+        if (this.getAndRemoveQuery(result, "__ignore") === "true" || resolveOptions.before && resolveOptions.before(result, this, defaultType) === false) {
             return result;
         }
 
         // 处理绝对路径（如 'http://'、'//' 和 'data:'）。
         if (digo.isAbsoluteUrl(result.path)) {
-            const absolute = typeof resolveOptions.absolute === "function" ? resolveOptions.absolute(result, this, usage) : resolveOptions.absolute;
+            const absolute = typeof resolveOptions.absolute === "function" ? resolveOptions.absolute(result, this, defaultType) : resolveOptions.absolute;
             if (absolute === "error" || absolute === "warning") {
                 this.log(source, sourceIndex, "Cannot use absolute url: '{url}'", { url: url }, absolute === "error" ? digo.LogLevel.error : digo.LogLevel.warning);
             }
@@ -329,11 +344,11 @@ export class TextModule extends Module {
         }
 
         // 解析相对路径。
-        if (resolveOptions.type ? resolveOptions.type === "node" : usage === "require") {
+        if ((resolveOptions.type || defaultType) === "node") {
             digo.verbose("Start Resoving: {path}", result);
             const extensions = resolveOptions.extensions || defaultExtensions;
             if (result.path.charCodeAt(0) === 46/*.*/) {
-                result.local = path.resolve(this.file.srcDir || this.file.destDir || "", result.path);
+                result.local = path.resolve(this.srcPath || this.destPath || "_", "..", result.path);
                 result.resolved = this.tryExtensions(result.local, extensions);
             } else {
                 const packageMains = resolveOptions.packageMains || defaultPackageMains;
@@ -364,10 +379,10 @@ export class TextModule extends Module {
                     if (!result.resolved) {
                         const modulesDirectories = resolveOptions.modulesDirectories || defaultModulesDirectories;
                         if (modulesDirectories.length) {
-                            let dirPath = this.file.srcDir || this.file.destDir || process.cwd();
+                            let dirPath = path.resolve(this.srcPath || this.destPath || "_", "..");
                             search: while (true) {
                                 for (const modulesDirectory of modulesDirectories) {
-                                    if (result.resolved = this.tryPackage(path.resolve(dirPath, modulesDirectory, result.path), packageMains, extensions)) {
+                                    if (result.resolved = this.tryPackage(path.join(dirPath, modulesDirectory, result.path), packageMains, extensions)) {
                                         break search;
                                     }
                                 }
@@ -382,21 +397,21 @@ export class TextModule extends Module {
                 }
             }
         } else {
-            result.local = path.resolve(this.file.srcDir || this.file.destDir || "", result.path);
+            result.local = path.resolve(this.srcPath || this.destPath || "_", "..", result.path);
             result.resolved = this.existsFile(result.local) ? result.local : undefined;
         }
 
         // 路径解析完成。
         if (!result.resolved) {
-            const notFound = resolveOptions.notFound != undefined ? (typeof resolveOptions.notFound === "function" ? resolveOptions.notFound(result, this, usage) : resolveOptions.notFound) : (usage === "inline" ? "warning" : "error");
+            const notFound = resolveOptions.notFound != undefined ? (typeof resolveOptions.notFound === "function" ? resolveOptions.notFound(result, this, defaultType) : resolveOptions.notFound) : (defaultType === "node" ? "error" : "warning");
             if (notFound === "error" || notFound === "warning") {
-                this.log(source, sourceIndex, usage === "require" ? "Cannot find module: '{url}'." : "Cannot find file: '{url}'.", { url: result.local || result.path }, notFound === "error" ? digo.LogLevel.error : digo.LogLevel.warning);
+                this.log(source, sourceIndex, defaultType === "node" ? "Cannot find module: '{url}'." : "Cannot find file: '{url}'.", { url: result.local || result.path }, notFound === "error" ? digo.LogLevel.error : digo.LogLevel.warning);
             }
             return result;
         }
 
         // 解析完成。
-        if (resolveOptions.after && resolveOptions.after(result, this, usage) === false) {
+        if (resolveOptions.after && resolveOptions.after(result, this, defaultType) === false) {
             delete result.resolved;
         }
         return result;
@@ -408,7 +423,7 @@ export class TextModule extends Module {
      * @returns 如果存在则返回 true，否则返回 false。
      */
     protected existsFile(path: string) {
-        if ((!this.options.resolve || this.options.resolve.strict !== false) && this.packer.getModuleFromPath(path) !== undefined) {
+        if ((!this.options.resolve || this.options.resolve.strict !== false) && this.packer.getModuleByPath(path) !== undefined) {
             return true;
         }
         return digo.existsFile(path);
@@ -625,16 +640,6 @@ export class TextModule extends Module {
 export interface TextModuleOptions extends ModuleOptions {
 
     /**
-     * 手动设置导入项。
-     */
-    imports?: string[];
-
-    /**
-     * 手动设置排除项。
-     */
-    excludes?: string[];
-
-    /**
      * 解析地址的配置。
      */
     resolve?: {
@@ -653,18 +658,18 @@ export interface TextModuleOptions extends ModuleOptions {
          * 在解析地址前的回调函数。
          * @param url 包含地址信息的对象。
          * @param module 地址所在的模块。
-         * @param usage 地址的使用位置。
+         * @param defaultType 地址默认的解析方式。
          * @return 如果忽略指定的地址则返回 false。
          * @example 将地址中 `~/` 更换为指定目录然后继续解析：
          * ```json
          * {
-         *      before: function(url, module, usage){
+         *      before: function(url, module, defaultType){
          *          url.path = url.path.replace(/^~\//, "virtual-root");
          *      }
          * }
          * ```
          */
-        before?(url: ResolveUrlResult, module: Module, usage: UrlUsage): boolean | void;
+        before?(url: ResolveUrlResult, module: Module, defaultType: UrlType): boolean | void;
 
         /**
          * 处理绝对路径（如 'http://'、'//' 和 'data:'）的方式。
@@ -673,14 +678,14 @@ export interface TextModuleOptions extends ModuleOptions {
          * - "ignore": 忽略。
          * @default "error"
          */
-        absolute?: "error" | "warning" | "ignore" | ((url: ResolveUrlResult, module: Module, usage: UrlUsage) => "error" | "warning" | "ignore");
+        absolute?: ErrorType | ((url: ResolveUrlResult, module: Module, defaultType: UrlType) => ErrorType);
 
         /**
          * 解析路径的方式。
          * - "relative": 采用相对地址解析。
          * - "node": 采用和 Node.js 中 `require` 相同的方式解析。
          */
-        type?: "relative" | "node",
+        type?: UrlType,
 
         /**
          * 路径别名列表。
@@ -722,16 +727,16 @@ export interface TextModuleOptions extends ModuleOptions {
          * - "warning": 警告。
          * - "ignore": 忽略。
          */
-        notFound?: "error" | "warning" | "ignore" | ((url: ResolveUrlResult, module: Module, usage: UrlUsage) => "error" | "warning" | "ignore");
+        notFound?: ErrorType | ((url: ResolveUrlResult, module: Module, defaultType: UrlType) => ErrorType);
 
         /**
          * 在解析地址成功后的回调函数。
          * @param url 包含地址信息的对象。
          * @param module 地址所在的模块。
-         * @param usage 地址的使用位置。
+         * @param defaultType 地址默认的解析方式。
          * @return 如果忽略指定的地址则返回 false。
          */
-        after?(url: ResolveUrlResult, module: Module, usage: UrlUsage): boolean | void;
+        after?(url: ResolveUrlResult, module: Module, defaultType: UrlType): boolean | void;
 
     };
 
@@ -776,7 +781,7 @@ export interface TextModuleOptions extends ModuleOptions {
          * @param savePath 模块的保存位置。
          * @return 返回生成的地址。
          */
-        format?: (url: UrlInfo, module: Module, savePath: string) => string;
+        format?: (url: UrlInfo, module: Module, savePath: string | undefined) => string;
 
         /**
          * 各个路径发布后的地址。
@@ -807,17 +812,17 @@ export interface TextModuleOptions extends ModuleOptions {
          * 在最终输出目标文件时追加的前缀。
          * @example "/* This file is generated by digo at __date. DO NOT EDIT DIRECTLY!! *\/"
          */
-        prepend?: string,
+        prepend?: string | ((module: Module, owner: Module) => string),
 
         /**
          * 在最终输出目标文件时追加的后缀。
          * @default ""
          */
-        append?: string,
+        append?: string | ((module: Module, owner: Module) => string),
 
         /**
          * 在每个依赖模块之间插入的代码。
-         * @default "\n"
+         * @default "\n\n"
          */
         seperator?: string,
 
@@ -825,27 +830,32 @@ export interface TextModuleOptions extends ModuleOptions {
          * 在每个依赖模块前插入的代码。
          * @default ""
          */
-        modulePrepend?: string,
+        modulePrepend?: string | ((module: Module, owner: Module) => string),
 
         /**
          * 在每个依赖模块后插入的代码。
          */
-        moduleAppend?: string,
+        moduleAppend?: string | ((module: Module, owner: Module) => string),
 
         /**
          * 用于缩进源码的字符串。
          * @default "\t"
          */
-        sourceIndent?: string,
+        sourceIndent?: string | ((module: Module, owner: Module) => string),
 
     };
 
 }
 
 /**
- * 表示地址的使用位置。
+ * 表示错误的处理方式。
  */
-export type UrlUsage = "inline" | "require";
+export type ErrorType = "error" | "warning" | "ignore";
+
+/**
+ * 表示地址的解析方式。
+ */
+export type UrlType = "relative" | "node";
 
 /**
  * 表示解析地址返回的结果。
@@ -892,19 +902,19 @@ export interface UrlInfo extends ResolveUrlResult {
 export interface Change {
 
     /**
-     * 获取当前更改记录在原始内容的起始位置。
+     * 当前更改记录在原始内容的起始位置。
      */
     startIndex: number;
 
     /**
-     * 获取当前更改记录在原始内容的结束位置（不包括结束位置）。
+     * 当前更改记录在原始内容的结束位置（不包括结束位置）。
      */
     endIndex: number;
 
     /**
-     * 获取当前替换的数据。
+     * 当前替换的数据。
      */
-    replacement: string | ((savePath: string) => string);
+    replacement: string | ((savePath: string | undefined) => string);
 
 }
 
