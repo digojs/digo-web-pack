@@ -4,7 +4,7 @@
  */
 import * as path from "path";
 import * as digo from "digo";
-import { Packer, getMimeType } from "./packer";
+import { Packer } from "./packer";
 import { Module, ModuleOptions, emptyObject } from "./module";
 
 /**
@@ -74,7 +74,7 @@ export class TextModule extends Module {
     save(file: digo.File, result?: digo.FileList) {
         file.path = this.destPath;
         const writer = file.createWriter(this.options.output);
-        this.write(writer, this.destPath || "");
+        this.build(writer, this.destPath || "");
         writer.end();
         if (result) {
             for (const path in this.extracts) {
@@ -87,8 +87,10 @@ export class TextModule extends Module {
 
     /**
      * 当被子类重写时负责获取当前模块的最终二进制内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件缓存。
      */
-    getBuffer() {
+    getBuffer(savePath: string) {
         return digo.stringToBuffer(this.getContent(this.destPath || this.srcPath || ""));
     }
 
@@ -99,8 +101,17 @@ export class TextModule extends Module {
      */
     getContent(savePath: string) {
         const writer = new digo.File().createWriter({ sourceMap: false });
-        this.write(writer, savePath);
+        this.build(writer, savePath);
         return writer.toString();
+    }
+
+    /**
+     * 确保当前模块及依赖都已解析。
+     */
+    resolve() {
+        super.resolve();
+        this.modules = this.getModuleList();
+        this.extracts = { __proto__: null! };
     }
 
     /**
@@ -122,8 +133,6 @@ export class TextModule extends Module {
 
         // 解析模块。
         this.resolve();
-        this.modules = this.getModuleList();
-        this.extracts = { __proto__: null! };
 
         // 生成模块内容。
         this.write(writer, savePath);
@@ -231,24 +240,6 @@ export class TextModule extends Module {
                     return word;
             }
         });
-    }
-
-    /**
-     * 获取指定扩展名的 MIME 类型。
-     * @param ext 要获取的扩展名。
-     * @return 返回 MIME 类型。
-     */
-    protected getMimeType(ext: string) {
-        return this.options.mimeTypes && this.options.mimeTypes[ext] || getMimeType(ext);
-    }
-
-    /**
-     * 获取指定模块的 data URI 地址。
-     * @param module 要获取的模块。
-     * @return 返回编码后的字符串。
-     */
-    protected getBase64Uri(module: Module) {
-        return digo.base64Uri(this.getMimeType(digo.getExt(module.destPath || "")), module.getBuffer());
     }
 
     // #region 解析公共
@@ -866,11 +857,6 @@ export interface TextModuleOptions extends ModuleOptions {
         sourceIndent?: string,
 
     };
-
-    /**
-     * 设置每个扩展名对应的 MIME 类型。
-     */
-    mimeTypes?: { [key: string]: string; };
 
 }
 

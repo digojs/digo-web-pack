@@ -4,7 +4,7 @@
  */
 import * as path from "path";
 import * as digo from "digo";
-import { Packer } from "./packer";
+import { Packer, getMimeType } from "./packer";
 
 /**
  * 表示一个模块。
@@ -156,13 +156,43 @@ export abstract class Module {
 
     /**
      * 当被子类重写时负责获取当前模块的最终二进制内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件缓存。
      */
-    abstract getBuffer();
+    abstract getBuffer(savePath: string);
+
+    /**
+     * 当被子类重写时负责获取当前模块的最终文本内容。
+     * @param savePath 要保存的目标路径。
+     * @return 返回文件内容。
+     */
+    getContent(savePath: string) {
+        return this.getBase64Uri(this);
+    }
 
     /**
      * 当被子类重写时负责获取当前模块的最终保存大小。
+     * @param savePath 要保存的目标路径。
      */
-    getSize() { return this.getBuffer().length; }
+    getSize(savePath: string) { return this.getBuffer(savePath).length; }
+
+    /**
+     * 获取指定模块的 data URI 地址。
+     * @param module 要获取的模块。
+     * @return 返回编码后的字符串。
+     */
+    protected getBase64Uri(module: Module) {
+        return digo.base64Uri(this.getMimeType(digo.getExt(module.destPath || "")), module.getBuffer(module.destPath || ""));
+    }
+
+    /**
+     * 获取指定扩展名的 MIME 类型。
+     * @param ext 要获取的扩展名。
+     * @return 返回 MIME 类型。
+     */
+    protected getMimeType(ext: string) {
+        return this.options.mimeTypes && this.options.mimeTypes[ext] || getMimeType(ext);
+    }
 
     // #endregion
 
@@ -317,6 +347,11 @@ export interface ModuleOptions {
      * 手动设置排除项。
      */
     excludes?: string[];
+
+    /**
+     * 设置每个扩展名对应的 MIME 类型。
+     */
+    mimeTypes?: { [key: string]: string; };
 
 }
 
