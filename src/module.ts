@@ -31,7 +31,12 @@ export abstract class Module {
     /**
      * 获取当前模块的源路径。
      */
-    readonly path: string;
+    readonly srcPath: string;
+
+    /**
+     * 获取当前模块的源路径。
+     */
+    readonly destPath?: string;
 
     /**
      * 初始化一个新的模块。
@@ -43,7 +48,8 @@ export abstract class Module {
         this.packer = packer;
         this.file = file;
         this.options = options || emptyObject!;
-        this.path = file.srcPath || path.resolve("_");
+        this.srcPath = file.srcPath || path.resolve("_");
+        this.destPath = file.destPath;
     }
 
     // #endregion
@@ -121,7 +127,7 @@ export abstract class Module {
      * @return 返回已解析的路径。
      */
     protected resolvePathInConfig(base: string, p?: string) {
-        return base.charCodeAt(0) === 46/*.*/ ? path.resolve(this.path || "", base, p || "") : path.resolve(base, p || "");
+        return base.charCodeAt(0) === 46/*.*/ ? path.resolve(this.srcPath || "", base, p || "") : path.resolve(base, p || "");
     }
 
     // #endregion
@@ -170,8 +176,8 @@ export abstract class Module {
             return false;
         }
         this.includes.push(module);
-        if (module.path) {
-            this.file.dep(module.path, {
+        if (module.srcPath) {
+            this.file.dep(module.srcPath, {
                 source: "WebPack:include"
             });
         }
@@ -187,8 +193,8 @@ export abstract class Module {
             return;
         }
         this.imports.push(module);
-        if (module.path) {
-            this.file.dep(module.path, {
+        if (module.srcPath) {
+            this.file.dep(module.srcPath, {
                 source: "WebPack:import"
             });
         }
@@ -203,8 +209,8 @@ export abstract class Module {
             return;
         }
         this.excludes.push(module);
-        if (module.path) {
-            this.file.dep(module.path, {
+        if (module.srcPath) {
+            this.file.dep(module.srcPath, {
                 source: "WebPack:exclude"
             });
         }
@@ -310,11 +316,6 @@ export default Module;
  * 表示模块解析的选项。
  */
 export interface ModuleOptions {
-
-    /**
-     * 设置每个扩展名对应的 MIME 类型。
-     */
-    mimeTypes?: { [key: string]: string; };
 
 }
 

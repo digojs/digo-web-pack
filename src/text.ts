@@ -90,82 +90,30 @@ export class TextModule extends Module {
      * @param result 要保存的目标列表。
      */
     save(file: digo.File, result?: digo.FileList) {
-        file.path = this.destPath;
+        this.resolve();
         const writer = file.createWriter(this.options.output);
-        this.build(writer, this.destPath || "");
+        const modules = this.getModuleList();
+        const extracts = [];
+        this.write(writer, file.path || path.resolve("_"), modules, extracts);
         writer.end();
-        if (result) {
-            for (const path in this.extracts) {
-                const extractedFile = new digo.File();
-                this.extracts[path].save(extractedFile);
-                result.add(extractedFile);
+        if (result && extracts.length) {
+            for (const file of extracts) {
+                result.add(file);
             }
         }
-    }
-
-    /**
-     * 当被子类重写时负责获取当前模块的最终二进制内容。
-     * @param savePath 要保存的目标路径。
-     * @return 返回文件缓存。
-     */
-    getBuffer(savePath: string) {
-        return digo.stringToBuffer(this.getContent(this.destPath || this.path || ""));
-    }
-
-    /**
-     * 获取当前模块的最终文本内容。
-     * @param savePath 要保存的目标路径。
-     * @return 返回文件内容。
-     */
-    getContent(savePath: string) {
-        const writer = new digo.File().createWriter({ sourceMap: false });
-        this.build(writer, savePath);
-        return writer.toString();
-    }
-
-    /**
-     * 确保当前模块及依赖都已解析。
-     */
-    resolve() {
-        super.resolve();
-        this.modules = this.getModuleList();
-        this.extracts = { __proto__: null! };
-    }
-
-    /**
-     * 获取当前模块依赖的所有模块。
-     */
-    modules: Module[];
-
-    /**
-     * 获取当前模块导出的所有模块。
-     */
-    extracts: { [path: string]: Module; };
-
-    /**
-     * 构建当前模块的内容。
-     * @param writer 要写入的目标写入器。
-     * @param savePath 要保存的目标路径。
-     */
-    protected build(writer: digo.Writer, savePath: string) {
-
-        // 解析模块。
-        this.resolve();
-
-        // 生成模块内容。
-        this.write(writer, savePath);
-
     }
 
     /**
      * 当被子类重写时负责将当前模块的内容写入到指定的写入器。
      * @param writer 要写入的目标写入器。
      * @param savePath 要保存的目标路径。
+     * @param modules 依赖的所有模块。
+     * @param extracts 导出的所有文件。
      */
-    protected write(writer: digo.Writer, savePath: string) {
+    protected write(writer: digo.Writer, savePath: string, modules: Module[], extracts: digo.File[]) {
         const outputOptions = this.options.output! || emptyObject;
-        for (let i = 0; i < this.modules.length; i++) {
-            const module = this.modules[i];
+        for (let i = 0; i < modules.length; i++) {
+            const module = modules[i];
 
             // 写入模块分隔符。
             if (i > 0 && outputOptions.seperator !== "") {
@@ -178,7 +126,7 @@ export class TextModule extends Module {
             }
 
             // 写入模块。
-            this.writeModule(writer, module, savePath);
+            this.writeModule(writer, module, savePath, modules, extracts);
 
             // 写入模块尾。
             if (outputOptions.moduleAppend) {
@@ -192,10 +140,14 @@ export class TextModule extends Module {
      * @param writer 要写入的目标写入器。
      * @param module 要写入的模块列表。
      * @param savePath 要保存的目标路径。
+     * @param modules 依赖的所有模块。
+     * @param extracts 导出的所有文件。
      */
-    protected writeModule(writer: digo.Writer, module: Module, savePath: string) {
+    protected writeModule(writer: digo.Writer, module: Module, savePath: string, modules: Module[], extracts: digo.File[]) {
         if (module instanceof TextModule) {
             module.writeContent(writer, savePath);
+        } else {
+            writer.write(module.getContent(savePath));
         }
     }
 
@@ -206,7 +158,7 @@ export class TextModule extends Module {
      */
     private writeContent(writer: digo.Writer, savePath: string) {
         if (!this.changes || this.changes.length === 0) {
-            writer.write(this.sourceContent, 0, this.sourceContent.length, this.path, 0, 0, this.sourceMapData);
+            writer.write(this.sourceContent, 0, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
             return;
         }
 
@@ -215,7 +167,7 @@ export class TextModule extends Module {
 
             // 写入上一次替换到这次更新记录中间的普通文本。
             if (p < change.startIndex) {
-                writer.write(this.sourceContent, p, change.startIndex, this.path, 0, 0, this.sourceMapData);
+                writer.write(this.sourceContent, p, change.startIndex, this.srcPath, 0, 0, this.sourceMapData);
             }
 
             // 写入替换的数据。
@@ -231,7 +183,7 @@ export class TextModule extends Module {
 
         // 输出最后一段文本。
         if (p < this.sourceContent.length) {
-            writer.write(this.sourceContent, p, this.sourceContent.length, this.path, 0, 0, this.sourceMapData);
+            writer.write(this.sourceContent, p, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
         }
     }
 
@@ -302,11 +254,13 @@ export class TextModule extends Module {
                         if (inliner) {
                             inliner(urlInfo, module);
                         } else {
-                            let base64Uri = this.getBase64Uri(module);
-                            if (formater) {
-                                base64Uri = formater(base64Uri);
-                            }
-                            this.addChange(source, sourceIndex, base64Uri);
+                            this.addChange(source, sourceIndex, savePath => {
+                                let base64Uri = module.getContent(savePath);
+                                if (formater) {
+                                    base64Uri = formater(base64Uri);
+                                }
+                                return base64Uri;
+                            });
                         }
                         return;
                     }
@@ -332,7 +286,7 @@ export class TextModule extends Module {
                     if (urlInfo.resolved) {
                         formated = this.replacPrefix(urlOptions.public, digo.relativePath(urlInfo.resolved));
                     }
-                    if (formated !== null && urlInfo.module && urlInfo.module.destPath && this.destPath) {
+                    if (formated !== null && urlInfo.module && urlInfo.module.destPath) {
                         formated = digo.relativePath(digo.getDir(savePath), urlInfo.module.destPath);
                     } else {
                         formated = urlInfo.path;

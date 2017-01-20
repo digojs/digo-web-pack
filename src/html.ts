@@ -286,11 +286,14 @@ export class HtmlModule extends TextModule {
     }
 
     /**
-     * 将当前模块的内容写入到指定的写入器。
+     * 当被子类重写时负责将当前模块的内容写入到指定的写入器。
      * @param writer 要写入的目标写入器。
+     * @param savePath 要保存的目标路径。
+     * @param modules 依赖的所有模块。
+     * @param extracts 导出的所有文件。
      */
-    write(writer: digo.Writer) {
-        super.writeModule(writer, this, null!);
+    protected write(writer: digo.Writer, savePath: string, modules: Module[], extracts: digo.File[]) {
+        super.writeModule(writer, this, savePath, modules, extracts);
     }
 
 }

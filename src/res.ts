@@ -1,5 +1,5 @@
 /**
- * @file digo 插件：Web 模块依赖打包
+ * @file 资源模块
  * @author xuld <xuld@vip.qq.com>
  */
 import * as digo from "digo";
@@ -12,9 +12,9 @@ import { Module, ModuleOptions } from "./module";
 export class ResModule extends Module {
 
     /**
-     * 获取当前资源模块的类型。
+     * 获取当前模块的选项。
      */
-    readonly type?: string;
+    readonly options: ResModuleOptions;
 
     /**
      * 存储当前文件的数据。
@@ -27,9 +27,8 @@ export class ResModule extends Module {
      * @param file 当前模块的源文件。
      * @param type 当前模块的类型。
      */
-    constructor(packer: Packer, file: digo.File, type?: string) {
+    constructor(packer: Packer, file: digo.File, options?: ResModuleOptions) {
         super(packer, file, undefined);
-        this.type = type;
         if (this.file.loaded) {
             this.srcData = this.file.data;
         }
@@ -51,10 +50,12 @@ export class ResModule extends Module {
         if (this.srcData != undefined) {
             return this.srcData instanceof Buffer ? this.srcData : digo.stringToBuffer(this.srcData);
         }
-        if (this.path) {
-            return digo.readFile(this.path);
+        try {
+            return digo.readFile(this.srcPath);
+        } catch (e) {
+            digo.verbose(e);
+            return Buffer.allocUnsafe(0);
         }
-        return Buffer.allocUnsafe(0);
     }
 
     /**
@@ -63,38 +64,46 @@ export class ResModule extends Module {
      * @return 返回文件内容。
      */
     getContent(savePath: string) {
-
+        if (typeof this.srcData === "string") {
+            return this.srcData;
+        }
+        if (this.options.type === "text" || this.options.type === "js" || this.options.type === "css" || this.options.type === "json") {
+            return this.getBuffer(savePath).toString();
+        }
+        return digo.base64Uri(this.options.mimeType || this.packer.getMimeType(digo.getExt(this.destPath || "")), this.getBuffer(savePath));
     }
 
     /**
-     * 当被子类重写时负责获取当前模块的最终保存大小。
+     * 获取当前模块的最终保存大小。
+     * @param savePath 要保存的目标路径。
      */
-    getSize() {
+    getSize(savePath: string) {
         if (this.srcData != undefined) {
-            return this.getBuffer().length;
+            return this.getBuffer(savePath).length;
         }
-        if (this.path) {
-            return digo.getStat(this.path).size;
+        try {
+            return digo.getStat(this.srcPath).size;
+        } catch (e) {
+            digo.verbose(e);
+            return 0;
         }
-        return 0;
     }
 
-    /**
-     * 获取指定模块的 data URI 地址。
-     * @param module 要获取的模块。
-     * @return 返回编码后的字符串。
-     */
-    protected getBase64Uri(module: Module) {
-        return digo.base64Uri(this.getMimeType(digo.getExt(module.destPath || "")), module.getBuffer(module.destPath || ""));
-    }
+}
+
+/**
+ * 表示解析文本模块的选项。
+ */
+export interface ResModuleOptions extends ModuleOptions {
 
     /**
-     * 获取指定扩展名的 MIME 类型。
-     * @param ext 要获取的扩展名。
-     * @return 返回 MIME 类型。
+     * 资源类型。
      */
-    protected getMimeType(ext: string) {
-        return this.options.mimeTypes && this.options.mimeTypes[ext] || getMimeType(ext);
-    }
+    type?: string;
+
+    /**
+     * 当前资源的 MIME 类型。
+     */
+    mimeType?: string;
 
 }

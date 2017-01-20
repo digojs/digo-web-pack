@@ -79,7 +79,7 @@ export class JsModule extends TextModule {
         if (urlInfo.resolved) {
             this.require(urlInfo.resolved, (module: Module) => {
                 this.import(module);
-                const url = this.getModuleName(module) || digo.relativePath(digo.getDir(this.path || ""), module.path).replace(/^[^\.]/, "./$&");
+                const url = this.getModuleName(module) || digo.relativePath(digo.getDir(this.srcPath || ""), module.srcPath).replace(/^[^\.]/, "./$&");
                 this.addChange(arg, argIndex, this.encodeString(url));
             });
         }
@@ -162,7 +162,7 @@ export class JsModule extends TextModule {
             writer.write(loader);
         }
         super.write(writer, savePath);
-        const modulePath = this.getModuleName(this) || digo.relativePath(this.path || "");
+        const modulePath = this.getModuleName(this) || digo.relativePath(this.srcPath || "");
         const libraryTarget = requireOptions && requireOptions.libraryTarget || "var";
         switch (libraryTarget) {
             case "var":
@@ -203,7 +203,7 @@ export class JsModule extends TextModule {
      * @param savePath 要保存的目标路径。
      */
     protected writeModule(writer: digo.Writer, module: Module, savePath: string) {
-        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module) || digo.relativePath(module.path || ""))}, function (require, exports, module) {\n`)
+        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module) || digo.relativePath(module.srcPath || ""))}, function (require, exports, module) {\n`)
         writer.indent();
         if (module instanceof JsModule) {
             super.writeModule(writer, module, savePath);
@@ -234,7 +234,7 @@ export class JsModule extends TextModule {
         }
         if (Array.isArray(emitRoot)) {
             for (let i = 0; i < emitRoot.length; i++) {
-                const relative = digo.relativePath(emitRoot[i], module.path);
+                const relative = digo.relativePath(emitRoot[i], module.srcPath);
                 if (relative.charCodeAt(0) !== 46/*.*/) {
                     return relative;
                 }

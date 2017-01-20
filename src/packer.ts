@@ -297,6 +297,44 @@ export class Packer {
     }
 
     /**
+     * 存储所有 MIME 类型表。
+     */
+    private _mimeTypes: { [key: string]: string; };
+
+    /**
+     * 获取所有 MIME 类型表。
+     */
+    get mimeTypes() {
+        if (!this._mimeTypes) {
+            this._mimeTypes = { __proto__: null! };
+            const db = require("mime-db");
+            for (const mimeType in db) {
+                for (const extension of db[mimeType].extensions || []) {
+                    this._mimeTypes[extension] = mimeType;
+                }
+            }
+        }
+        return this._mimeTypes;
+    }
+
+    /**
+     * 设置所有 MIME 类型表。
+     */
+    set mimeTypes(value) {
+        this._mimeTypes = value;
+    }
+
+    /**
+     * 从 MIME 数据库获取 MIME 类型。
+     * @param ext 要获取的扩展名。
+     * @return 返回 MIME 类型。
+     */
+    getMimeType(ext: string | undefined) {
+        ext = ext || "";
+        return this.mimeTypes[ext.toLowerCase()] || "application/" + ext.replace('.', "");
+    }
+
+    /**
      * 解析一个资源模块。
      */
     res = {
@@ -351,25 +389,4 @@ export class Packer {
         }
     };
 
-}
-
-var mimeTypes: { [key: string]: string; };
-
-/**
- * 从 MIME 数据库获取 MIME 类型。
- * @param ext 要获取的扩展名。
- * @return 返回 MIME 类型。
- */
-export function getMimeType(ext: string | undefined) {
-    if (!mimeTypes) {
-        mimeTypes = { __proto__: null! };
-        const db = require("mime-db");
-        for (const mimeType in db) {
-            for (const extension of db[mimeType].extensions || []) {
-                mimeTypes[extension] = mimeType;
-            }
-        }
-    }
-    ext = ext || "";
-    return mimeTypes[ext.toLowerCase()] || "application/" + ext.replace('.', "");
 }
