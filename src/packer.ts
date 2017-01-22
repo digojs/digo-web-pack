@@ -124,7 +124,7 @@ export class Packer {
                     this.setModule(file, module = this.createDefaultModule(file));
                 }
                 if (this._allFileAdded) {
-                    module.parse();
+                    module.ensure();
                 }
                 this.asyncQueue.unlock("loadFile");
             }
@@ -201,7 +201,7 @@ export class Packer {
 
             // 解析每个入口模块的依赖，并递归解析。
             for (const file of this.files) {
-                this.getModule(file).parse();
+                this.getModule(file).ensure();
             }
         });
 

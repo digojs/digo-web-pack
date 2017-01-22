@@ -31,7 +31,7 @@ export class CssModule extends TextModule {
      * 当被子类重写时负责解析当前模块。
      */
     parse() {
-        this.file.content.replace(/\/\*([\s\S]*?)(?:\*\/|$)|((?:@import\s+url|\burl)\s*\(\s*)("((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|[^\)\n\r]*)\s*\)\s*;?/g, (matchSource: string, comment: string | undefined, urlPrefix: string | undefined, urlString: string | undefined, urlDoubleString: string | undefined, urlSingleString: string | undefined, matchIndex: number) => {
+        this.file.content.replace(/\/\*([\s\S]*?)(?:\*\/|$)|((?:@import\s+url|\burl)\s*\(\s*)("((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|[^\)\n\r]*)\s*\)\s*(?:;\s*(?:\r\n?|\n)?)?/g, (matchSource: string, comment: string | undefined, urlPrefix: string | undefined, urlArg: string | undefined, urlArgDouble: string | undefined, urlArgSingle: string | undefined, matchIndex: number) => {
 
             // /* ... */
             if (comment != undefined) {
@@ -43,16 +43,16 @@ export class CssModule extends TextModule {
             if (urlPrefix != undefined) {
 
                 // 提取引号内的内容。
-                const argString = urlDoubleString != undefined ? urlDoubleString : urlSingleString != undefined ? urlSingleString : urlString!;
-                const argStringIndex = matchIndex + urlPrefix.length + (argString.length === urlString!.length ? 0 : 1);
-                const url = this.decodeString(argString);
+                const arg = urlArgDouble != undefined ? urlArgDouble : urlArgSingle != undefined ? urlArgSingle : urlArg!;
+                const argIndex = matchIndex + urlPrefix.length + (arg.length === urlArg!.length ? 0 : 1);
+                const url = this.decodeString(arg);
 
                 if (urlPrefix.charCodeAt(0) === 64/*@*/) {
                     // @import url(...);
-                    this.parseImport(matchSource, matchIndex, argString, argStringIndex, url, urlString!);
+                    this.parseImport(matchSource, matchIndex, arg, argIndex, url, urlArg!);
                 } else {
                     // url(...)
-                    this.parseUrlFunc(matchSource, matchIndex, argString, argStringIndex, url, urlString!);
+                    this.parseUrlFunc(matchSource, matchIndex, arg, argIndex, url, urlArg!);
                 }
                 return "";
             }
@@ -160,7 +160,7 @@ export class CssModule extends TextModule {
      */
     protected encodeString(value: string, quote: string) {
         if (quote.charCodeAt(0) === 34/*"*/ || quote.charCodeAt(0) === 39/*'*/) {
-            return JSON.stringify(value).slice(1, -1);
+            return JSON.stringify(value).slice(1, -1).replace(/'/g, "\\'");
         }
         return /^[\w\.\-@:\/#+!\?%&|,;=]*$/.test(value) ? value : JSON.stringify(value);
     }

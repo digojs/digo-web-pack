@@ -73,7 +73,7 @@ export abstract class Module {
     /**
      * 当被子类重写时负责解析当前模块。
      */
-    abstract parse();
+    abstract parse(): void;
 
     /**
      * 存储当前模块的所有依赖项。
@@ -94,6 +94,15 @@ export abstract class Module {
         console.assert(!this.resolved);
         if (path != undefined) this.packer.ensureFile(path);
         this.requires.push([path, callback]);
+    }
+
+    /**
+     * 确保当前模块已解析。
+     */
+    ensure() {
+        if (!this.resolved) {
+            this.parse();
+        }
     }
 
     /**
@@ -275,7 +284,7 @@ export abstract class Module {
      * @param file 要保存的目标文件。
      * @param result 要保存的目标列表。
      */
-    abstract save(saveFile: digo.File, result?: digo.FileList);
+    abstract save(saveFile: digo.File, result?: digo.FileList): void;
 
     /**
      * 获取当前模块的最终二进制内容。

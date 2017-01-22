@@ -76,14 +76,14 @@ describe("js", function () {
 });
 
 digo.define("main.js", function (require, exports, module) {
-\trequire("./body.js");
+\trequire("body.js");
 });`);
         assert.equal(buildJs('require("./body.css");'), `digo.define("body.css", function (require, exports, module) {
 \tmodule.exports = digo.style("body { color: red }");
 });
 
 digo.define("main.js", function (require, exports, module) {
-\trequire("./body.css");
+\trequire("body.css");
 });`);
     });
 

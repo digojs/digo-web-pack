@@ -4,21 +4,18 @@ var digo = digo || {
         digo.cache[moduleName.toLowerCase()] = {
             loaded: false,
             define: factory,
-            require: function (module, callback) {
-                return digo.require(module, callback, moduleName);
-            },
             exports: {}
         };
     },
-    require: function (moduleName, callback, baseUrl, data) {
+    require: function (moduleName, callback, data) {
         if (typeof moduleName === "string") {
-            var module = digo.cache[digo.resolve(moduleName, baseUrl).toLowerCase()];
+            var module = digo.cache[moduleName.toLowerCase()];
             if (typeof callback === "function") {
                 if (module) {
-                    setTimeout(callback, 0, digo.require(moduleName, undefined, baseUrl), data);
+                    setTimeout(callback, 0, digo.require(moduleName), data);
                 } else {
-                    digo.async((digo.baseUrl || "") + digo.resolve(moduleName, baseUrl), function () {
-                        callback(digo.require(moduleName, undefined, baseUrl), data);
+                    digo.async((digo.baseUrl || "") + moduleName + (digo.urlArgs || ""), function () {
+                        callback(digo.require(moduleName), data);
                     });
                 }
             } else {
@@ -27,7 +24,7 @@ var digo = digo || {
                 }
                 if (!module.loaded) {
                     module.loaded = true;
-                    module.define(module.require, module.exports, module);
+                    module.define(digo.require, module.exports, module);
                 }
                 return module.exports;
             }
@@ -39,19 +36,12 @@ var digo = digo || {
                     digo.require(moduleName[i], function (moduleExport, i) {
                         exports[i] = moduleExport;
                         --pending < 1 && callback && callback.apply(this, exports);
-                    }, baseUrl, i);
+                    }, i);
                 }
             } else {
                 callback && callback(this);
             }
         }
-    },
-    resolve: function (moduleName, baseUrl) {
-        var anchor = digo.anchor || (digo.anchor = document.createElement("a"));
-        anchor.href = "/";
-        var href = anchor.href;
-        anchor.href = "/" + (baseUrl || "_") + "/../" + moduleName;
-        return anchor.href.substr(href.length);
     },
     async: function (url, callback) {
         var script = document.createElement("script");

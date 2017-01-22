@@ -1,0 +1,20 @@
+﻿.url-1 {
+    background: url(images/favicon.ico);
+    background: url('images/favicon.ico');
+    background: url("images/favicon.ico");
+    background: url(images/favicon.ico?\31);
+    background: url('images/favicon.ico?\'&a=1');
+    background: url('images/favicon.ico?"&a=1');
+}
+.url-2 {
+    background: url(images/favicon.ico?__inline=1);
+    background: url(images/favicon.ico?__inline=1&a=1);
+    background: url(images/favicon.ico?__inline=1&a=1&r=2);
+    background: url(images/favicon.ico?a=1&r=2&__inline=1);
+    background: url(images/favicon.ico?__inline);
+    background: url("images/favicon.ico?__inline");
+}
+.url-3 {
+    filter: progid:DXImageTransform.Microsoft.AlphaImageLoader(enabled='true', sizingMethod='', src='images/favicon.ico');
+    filter: progid:DXImageTransform.Microsoft.AlphaImageLoader(enabled='true', sizingMethod='', src='images/favicon.ico?__inline');
+}

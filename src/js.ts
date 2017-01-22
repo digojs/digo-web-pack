@@ -22,9 +22,36 @@ export class JsModule extends TextModule {
     options: JsModuleOptions;
 
     /**
-     * 判断当前模块是否是 Commonjs 模块。
+     * 是否强制使所有模块都作为 Commonjs 模块处理。
      */
-    commonjs: boolean;
+    commonjs?: boolean;
+
+    /**
+     * 添加的模块加载器。
+     */
+    loader?: boolean | string;
+
+    /**
+     * 默认编译的库类型。可能的值有：
+     * - var: var Library = xxx
+     * - this: this["Library"] = xxx
+     * - commonjs: exports["Library"] = xxx
+     * - commonjs2: this.exports = xxx
+     * - amd
+     * - umd
+     * @default "var"
+     */
+    module?: "var" | "this" | "exports" | "commonjs" | "umd" | "amd" | "lib";
+
+    /**
+     * 导出的变量名。
+     */
+    exports?: string;
+
+    /**
+     * 设置导出 CSS 的路径。
+     */
+    extractCss?: boolean | string;
 
     /**
      * 初始化一个新的模块。
@@ -86,9 +113,27 @@ export class JsModule extends TextModule {
         if (urlInfo.resolved) {
             this.require(urlInfo.resolved, (module: Module) => {
                 this.import(module);
-                const url = this.getModuleName(module) || digo.relativePath(digo.getDir(this.destPath || "_"), module.destPath).replace(/^[^\.]/, "./$&");
-                this.addChange(arg, argIndex, this.encodeString(url));
+                this.addChange(arg, argIndex, this.encodeString(this.getModuleName(module)));
             });
+        }
+    }
+
+    /**
+     * 解析一个内置命令。
+     * @param source 相关的代码片段。
+     * @param sourceIndex 片段在源文件的起始位置。
+     * @param name 解析的命令名。
+     * @param arg 解析的命令参数。
+     * @param argIndex 解析的命令参数在源文件的起始位置。
+     */
+    protected parseCommand(source: string, sourceIndex: number, name: string, arg: string, argIndex: number) {
+        if (name === "config") {
+            const kv = /(loader|commonjs|module|exports|extractCss)\s+(\w*)/.exec(arg);
+            if (kv) {
+                this[kv[1]] = kv[1] === "loader" || kv[1] === "commonjs" ? kv[2] !== "false" : kv[2];
+            }
+        } else {
+            super.parseCommand(source, sourceIndex, name, arg, argIndex);
         }
     }
 
@@ -138,7 +183,7 @@ export class JsModule extends TextModule {
      * @returns 返回处理后的字符串。
      */
     protected encodeString(value: string) {
-        return JSON.stringify(value).slice(1, -1);
+        return JSON.stringify(value).slice(1, -1).replace(/'/g, "\\'");
     }
 
     /**
@@ -177,24 +222,33 @@ export class JsModule extends TextModule {
                 extracts.push(cssFile);
             }
         }
-        const loader = requireOptions.loader != undefined ? requireOptions.loader : !this.excludes.length;
+        const loader = this.loader != undefined ? this.loader : requireOptions.loader != undefined ? requireOptions.loader : !this.excludes.length;
         if (loader === true) {
             writer.write(this.getLoader());
         } else if (typeof loader === "string") {
             writer.write(loader);
         }
+        if (requireOptions.baseUrl) {
+            writer.write(`digo.baseUrl = ${JSON.stringify(requireOptions.baseUrl)};`);
+        }
+        const append = this.options.url && (typeof this.options.url.append === "function" ? this.options.url.append({ path: "", query: "" }, this) : this.options.url.append);
+        if (append) {
+            const urlInfo = { path: "", query: "?" + append };
+            this.replaceQueryVariable(urlInfo);
+            writer.write(`digo.urlArgs = ${JSON.stringify(urlInfo.query)};`);
+        }
         super.write(writer, savePath, modules, extracts);
-        const modulePath = this.getModuleName(this) || digo.relativePath(this.destPath || "");
-        const libraryTarget = requireOptions.libraryTarget || "var";
-        switch (libraryTarget) {
+        const modulePath = this.getModuleName(this);
+        const module = requireOptions.module || "var";
+        switch (module) {
             case "var":
-                writer.write(`\n\nvar ${requireOptions.variable || "exports"} = digo.require(${JSON.stringify(modulePath)});`);
+                writer.write(`\n\nvar ${requireOptions.exports || "exports"} = digo.require(${JSON.stringify(modulePath)});`);
                 break;
             case "this":
-                writer.write(`\n\nthis[${JSON.stringify(requireOptions.variable || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
+                writer.write(`\n\nthis[${JSON.stringify(requireOptions.exports || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
                 break;
             case "exports":
-                writer.write(`\n\nexports[${JSON.stringify(requireOptions.variable || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
+                writer.write(`\n\nexports[${JSON.stringify(requireOptions.exports || "exports")}] = digo.require(${JSON.stringify(modulePath)});`);
                 break;
             case "commonjs":
                 writer.write(`\n\nmodule.exports = digo.require(${JSON.stringify(modulePath)});`);
@@ -209,7 +263,7 @@ export class JsModule extends TextModule {
     } else if (typeof define === 'function' && define.amd) {
         define(factory);
     } else {
-        root[${JSON.stringify(requireOptions.variable || "exports")}] = factory();
+        root[${JSON.stringify(requireOptions.exports || "exports")}] = factory();
     }
 }(this, function factory() {
     return digo.require(${JSON.stringify(modulePath)}); });;
@@ -227,7 +281,7 @@ export class JsModule extends TextModule {
      * @param extracts 导出的所有文件。
      */
     protected writeModule(writer: digo.Writer, module: Module, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
-        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module) || digo.relativePath(module.destPath || ""))}, function (require, exports, module) {\n`)
+        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module))}, function (require, exports, module) {\n`)
         writer.indent();
         if (module instanceof JsModule) {
             super.writeModule(writer, module, savePath, modules, extracts);
@@ -249,21 +303,11 @@ export class JsModule extends TextModule {
     /**
      * 获取指定模块的名称。
      * @param module 要获取的模块。
-     * @return 返回模块名。如果无可用名称则返回 undefined。
+     * @return 返回模块名。
      */
     protected getModuleName(module: Module) {
-        let emitRoot = this.options.require && this.options.require.emitRoot || this.options.resolve && this.options.resolve.root;
-        if (typeof emitRoot === "string") {
-            emitRoot = [emitRoot];
-        }
-        if (Array.isArray(emitRoot)) {
-            for (let i = 0; i < emitRoot.length; i++) {
-                const relative = digo.relativePath(emitRoot[i], module.srcPath);
-                if (relative.charCodeAt(0) !== 46/*.*/) {
-                    return relative;
-                }
-            }
-        }
+        const root = this.options.require && this.options.require.root || "";
+        return digo.relativePath(root, module.destPath);
     }
 
     /**
@@ -276,7 +320,7 @@ export class JsModule extends TextModule {
      * @return 返回加载器源码。
      */
     protected getLoader() {
-        return JsModule._loader || (JsModule._loader = digo.readFile(require.resolve("../data/loader.js")).toString());
+        return JsModule._loader || (JsModule._loader = digo.readFile(require.resolve("../data/loader.default.js")).toString());
     }
 
 }
@@ -292,25 +336,24 @@ export interface JsModuleOptions extends TextModuleOptions {
     require?: {
 
         /**
+         * 模块的跟路径。
+         */
+        root?: string;
+
+        /**
+         * 异步模块的请求根地址。
+         */
+        baseUrl?: string;
+
+        /**
          * 是否强制使所有模块都作为 Commonjs 模块处理。
          */
         commonjs?: boolean;
 
         /**
-         * 模块的跟路径。
-         */
-        emitRoot?: string | string[];
-
-        /**
          * 添加的模块加载器。
          */
         loader?: boolean | string;
-
-        /**
-         * 在异步加载模块时，是否追加 cross-orign 属性。
-         * @see https://developer.mozilla.org/en/docs/Web/HTML/Element/script#attr-crossorigin
-         */
-        crossOriginLoading?: boolean,
 
         /**
          * 默认编译的库类型。可能的值有：
@@ -322,12 +365,12 @@ export interface JsModuleOptions extends TextModuleOptions {
          * - umd
          * @default "var"
          */
-        libraryTarget?: "var" | "this" | "exports" | "commonjs" | "umd" | "amd" | "lib";
+        module?: "var" | "this" | "exports" | "commonjs" | "umd" | "amd" | "lib";
 
         /**
          * 导出的变量名。
          */
-        variable?: string;
+        exports?: string;
 
         /**
          * 设置导出 CSS 的路径。

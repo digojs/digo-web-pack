@@ -283,7 +283,7 @@ export class TextModule extends Module {
             }
 
             // 追加地址后缀。
-            if (!this.replaceQueryVariable(urlInfo)) {
+            if (this.getAndRemoveQuery(urlInfo, "__append") !== "false" && !this.replaceQueryVariable(urlInfo)) {
                 const append = typeof urlOptions.append === "function" ? urlOptions.append(urlInfo, this) : urlOptions.append;
                 if (append) {
                     urlInfo.query += (urlInfo.query ? "&" : "?") + append;
@@ -595,7 +595,28 @@ export class TextModule extends Module {
      * @param commentIndex *comment* 在源文件的起始位置。
      */
     protected parseComment(source: string, sourceIndex: number, comment: string, commentIndex: number) {
-        // TODO
+        let commentOptions = this.options.comment;
+        if (commentOptions === false) {
+            return;
+        }
+        if (!commentOptions || commentOptions === true) {
+            commentOptions = emptyObject;
+        }
+        let foundCommand = false;
+        comment.replace(/(#(include|import|exclude|config)\s*)(.*)/g, (matchSource: string, prefix: string, name: string, args: string, matchIndex: number) => {
+            if ((commentOptions as any)[name] === false) {
+                return "";
+            }
+            foundCommand = true;
+            const match = /'(.*)'|"(.*)"/.exec(args);
+            const arg = match ? match[1] : args.trim();
+            const argIndex = commentIndex + matchIndex + prefix.length + (match ? match.index + 1 : 0);
+            this.parseCommand(source, sourceIndex, name, arg, argIndex);
+            return "";
+        });
+        if (foundCommand) {
+            this.addChange(source, sourceIndex, "");
+        }
     }
 
     /**
@@ -604,7 +625,86 @@ export class TextModule extends Module {
      * @param sourceIndex *source* 在源文件的起始位置。
      */
     protected parseSubs(source: string, sourceIndex: number) {
-        // TODO
+        let subOptions = this.options.sub;
+        if (subOptions === false) {
+            return;
+        }
+        if (!subOptions || subOptions === true) {
+            subOptions = emptyObject;
+        }
+        source.replace(/(__(include|import|exclude|config|url|macro)\s*\(\s*)("((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|[^\)\n\r]*)\s*\)/g, (matchSource: string, prefix: string, name: string, subArg: string, subArgDouble: string | undefined, subArgSingle: string | undefined, matchIndex: number) => {
+            if ((subOptions as any)[name] === false) {
+                return "";
+            }
+            const arg = subArgDouble != undefined ? subArgDouble : subArgSingle != undefined ? subArgSingle : subArg;
+            const argIndex = sourceIndex + matchIndex + prefix.length + (subArg.length === subArg!.length ? 0 : 1);
+            this.parseCommand(source, sourceIndex, name, arg, argIndex);
+            return "";
+        });
+    }
+
+    /**
+     * 解析一个内置命令。
+     * @param source 相关的代码片段。
+     * @param sourceIndex 片段在源文件的起始位置。
+     * @param name 解析的命令名。
+     * @param arg 解析的命令参数。
+     * @param argIndex 解析的命令参数在源文件的起始位置。
+     */
+    protected parseCommand(source: string, sourceIndex: number, name: string, arg: string, argIndex: number) {
+        switch (name) {
+            case "include": {
+                const urlInfo = this.resolveUrl(arg, argIndex, arg, "relative");
+                if (urlInfo.resolved) {
+                    this.require(urlInfo.resolved, module => {
+                        if (!this.include(module!)) {
+                            this.log(source, sourceIndex, "Circular include with {path}", { path: module!.srcPath }, digo.LogLevel.error);
+                            return;
+                        }
+                        this.addChange(source, sourceIndex, savePath => module!.getContent(savePath));
+                    });
+                }
+                break;
+            }
+            case "import": {
+                const urlInfo = this.resolveUrl(arg, argIndex, arg, "node");
+                if (urlInfo.resolved) {
+                    this.require(urlInfo.resolved, module => {
+                        this.import(module!);
+                    });
+                }
+                break;
+            }
+            case "exclude": {
+                const urlInfo = this.resolveUrl(arg, argIndex, arg, "node");
+                if (urlInfo.resolved) {
+                    this.require(urlInfo.resolved, module => {
+                        this.import(module!);
+                    });
+                }
+                break;
+            }
+            case "url": {
+                this.parseUrl(source, sourceIndex, arg, "__url");
+                break;
+            }
+            case "macro": {
+                const defined = this.getDefined(arg);
+                this.addChange(source, sourceIndex, defined == undefined ? "" : defined.toString());
+                break;
+            }
+        }
+    }
+
+    /**
+     * 获取预定义的宏。
+     * @param name 要获取的宏名称。
+     * @return 返回宏对应的值。如果宏未定义则返回 undefined。
+     */
+    protected getDefined(name: string) {
+        const defines = this.options.defines;
+        if (!defines || !defines.hasOwnProperty(name)) return undefined;
+        return typeof defines[name] === "function" ? (defines[name] as ((module: Module) => boolean | string))(this) : defines[name];
     }
 
     /**
@@ -797,6 +897,85 @@ export interface TextModuleOptions extends ModuleOptions {
         public?: { [url: string]: string }
 
     };
+
+    /**
+     * 解析注释内指令（如 #include）。
+     */
+    comment?: boolean | {
+
+        /**
+         * 是否解析 #include 指令。
+         * @default true
+         */
+        include?: boolean;
+
+        /**
+         * 是否解析 #exclude 指令。
+         * @default true
+         */
+        exclude?: boolean;
+
+        /**
+         * 是否解析 #require 指令。
+         * @default true
+         */
+        import?: boolean;
+
+        /**
+         * 是否解析 #config 指令。
+         * @default true
+         */
+        config?: boolean;
+
+    };
+
+    /**
+     * 是否解析全局宏。
+     */
+    sub?: boolean | {
+
+        /**
+         * 是否解析 __url 常量。
+         * @default true
+         */
+        url?: boolean;
+
+        /**
+         * 解析 __macro 常量的值。
+         * @default true
+         */
+        macro?: boolean;
+
+        /**
+         * 是否解析 __include 常量。
+         * @default true
+         */
+        include?: boolean;
+
+        /**
+         * 是否解析 __exclude 指令。
+         * @default true
+         */
+        exclude?: boolean;
+
+        /**
+         * 是否解析 __require 指令。
+         * @default true
+         */
+        import?: boolean;
+
+        /**
+         * 是否解析 __config 指令。
+         * @default true
+         */
+        config?: boolean;
+
+    };
+
+    /**
+     * 宏列表。
+     */
+    defines?: { [name: string]: boolean | string | ((module: Module) => boolean | string) };
 
     /**
      * 输出设置。
