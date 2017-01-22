@@ -346,12 +346,11 @@ export class TextModule extends Module {
         // 解析相对路径。
         if ((resolveOptions.type || defaultType) === "node") {
             digo.verbose("Start Resoving: {path}", result);
+            const packageMains = resolveOptions.packageMains || defaultPackageMains;
             const extensions = resolveOptions.extensions || defaultExtensions;
             if (result.path.charCodeAt(0) === 46/*.*/) {
-                result.local = path.resolve(this.srcPath || this.destPath || "_", "..", result.path);
-                result.resolved = this.tryExtensions(result.local, extensions);
+                result.resolved = this.tryPackage(path.resolve(this.srcPath || this.destPath || "_", "..", result.path), packageMains, extensions);
             } else {
-                const packageMains = resolveOptions.packageMains || defaultPackageMains;
                 // alias
                 let alias = this.replacPrefix(resolveOptions.alias, result.path);
                 if (alias !== undefined) {
@@ -472,11 +471,13 @@ export class TextModule extends Module {
                 }
                 if (packageObj) {
                     for (const packageMain of packageMains) {
-                        const main = path.join(module, packageObj[packageMain]);
-                        digo.verbose("Apply packageMains {field} => {path}", { field: packageMain, path: main });
-                        const result = this.tryExtensions(main, extensions);
-                        if (result) {
-                            return result;
+                        if (packageObj[packageMain] != undefined) {
+                            const main = path.join(module, packageObj[packageMain]);
+                            digo.verbose("Apply packageMains {field} => {path}", { field: packageMain, path: main });
+                            const result = this.tryExtensions(main, extensions);
+                            if (result) {
+                                return result;
+                            }
                         }
                     }
                 }

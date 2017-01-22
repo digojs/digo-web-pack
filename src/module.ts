@@ -139,7 +139,7 @@ export abstract class Module {
      * @return 返回已解析的路径。
      */
     protected resolvePathInConfig(base: string, p?: string) {
-        return base.charCodeAt(0) === 46/*.*/ && this.srcPath != undefined ? path.resolve(this.srcPath, "..", base, p || "") : path.resolve(base, p || "");
+        return path.resolve(base, p || "");
     }
 
     // #endregion
