@@ -69,6 +69,7 @@ export class JsModule extends TextModule {
      */
     parse() {
         this.file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
+            // TODO: 改进异步 require 实现
 
             // "...", '...'
             if (doubleString != undefined || singleString != undefined) {
