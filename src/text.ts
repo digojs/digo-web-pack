@@ -334,6 +334,11 @@ export class TextModule extends Module {
             return result;
         }
 
+        // 忽略空路径。
+        if (!result.path) {
+            return result;
+        }
+
         // 处理绝对路径（如 'http://'、'//' 和 'data:'）。
         if (digo.isAbsoluteUrl(result.path)) {
             const absolute = typeof resolveOptions.absolute === "function" ? resolveOptions.absolute(result, this, defaultType) : resolveOptions.absolute;
