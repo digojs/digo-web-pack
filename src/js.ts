@@ -8,8 +8,6 @@ import { Packer } from "./packer";
 import { Module, emptyObject } from "./module";
 import { TextModule, TextModuleOptions, UrlType, UrlInfo } from "./text";
 import { CssModule } from "./css";
-import { HtmlModule } from "./html";
-import { ResModule } from "./res";
 
 /**
  * 表示一个 JS 模块。
@@ -52,6 +50,11 @@ export class JsModule extends TextModule {
      * 设置导出 CSS 的路径。
      */
     extractCss?: boolean | string;
+
+    /**
+     * 当被子类重写时负责返回当前模块的类型。
+     */
+    get type() { return "js"; }
 
     /**
      * 初始化一个新的模块。
@@ -188,6 +191,11 @@ export class JsModule extends TextModule {
     }
 
     /**
+     * 当被子类重写时负责返回一个值，指示当前模块是否允许生成源映射。
+     */
+    get sourceMap() { return true; }
+
+    /**
      * 当被子类重写时负责将当前模块的内容写入到指定的写入器。
      * @param writer 要写入的目标写入器。
      * @param savePath 要保存的目标路径。
@@ -284,16 +292,14 @@ export class JsModule extends TextModule {
     protected writeModule(writer: digo.Writer, module: Module, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
         writer.write(`digo.define(${JSON.stringify(this.getModuleName(module))}, function (require, exports, module) {\n`)
         writer.indent();
-        if (module instanceof JsModule) {
+        if (module.type === "js") {
             super.writeModule(writer, module, savePath, modules, extracts);
-        } else if (module instanceof CssModule || (module instanceof ResModule && module.options.type === "css")) {
+        } else if (module.type === "css") {
             writer.write(`module.exports = digo.style(${JSON.stringify(module.getContent(savePath))});`);
-        } else if (module instanceof HtmlModule || module instanceof TextModule || module instanceof ResModule && module.options.type === "text") {
+        } else if (module.type === "text") {
             writer.write(`module.exports = ${JSON.stringify(module.getContent(savePath))};`);
-        } else if (module instanceof ResModule && module.options.type === "json") {
+        } else if (module.type === "json") {
             writer.write(`module.exports = ${module.getContent(savePath)};`);
-        } else if (module instanceof ResModule && module.options.type === "js") {
-            writer.write(`${module.getContent(savePath)};`);
         } else {
             writer.write(`module.exports = ${JSON.stringify(module.getContent(savePath))};`);
         }

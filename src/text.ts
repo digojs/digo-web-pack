@@ -28,6 +28,11 @@ export class TextModule extends Module {
     protected readonly sourceMapData: digo.File["sourceMapData"];
 
     /**
+     * 当被子类重写时负责返回当前模块的类型。
+     */
+    get type() { return "text"; }
+
+    /**
      * 初始化一个新的模块。
      * @param packer 当前模块所属的打包器。
      * @param file 当前模块的源文件。
@@ -98,6 +103,11 @@ export class TextModule extends Module {
     }
 
     /**
+     * 当被子类重写时负责返回一个值，指示当前模块是否允许生成源映射。
+     */
+    get sourceMap() { return false; }
+
+    /**
      * 当被子类重写时负责将当前模块生成的内容保存到指定的文件。
      * @param file 要保存的目标文件。
      * @param result 要保存的目标列表。
@@ -106,7 +116,10 @@ export class TextModule extends Module {
         this.resolve();
         const modules = this.getModuleList();
         const extracts = [];
-        const writer = file.createWriter(this.options.output);
+        const writer = file.createWriter({
+            sourceMap: this.sourceMap === false ? false : this.options.output && this.options.output.sourceMap,
+            indentChar: this.options.output && this.options.output.indentChar
+        });
         this.write(writer, file.path, modules, extracts);
         writer.end();
         if (result && extracts.length) {
@@ -986,12 +999,7 @@ export interface TextModuleOptions extends ModuleOptions {
     /**
      * 输出设置。
      */
-    output?: {
-
-        /**
-         * 设置是否生成源码映射表。
-         */
-        sourceMap?: boolean;
+    output?: digo.WriterOptions & {
 
         /**
          * 在最终输出目标文件时追加的前缀。

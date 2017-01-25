@@ -18,6 +18,11 @@ export class CssModule extends TextModule {
     options: CssModuleOptions;
 
     /**
+     * 当被子类重写时负责返回当前模块的类型。
+     */
+    get type() { return "css"; }
+
+    /**
      * 初始化一个新的模块。
      * @param packer 当前模块所属的打包器。
      * @param file 当前模块的源文件。
@@ -164,6 +169,11 @@ export class CssModule extends TextModule {
         }
         return /^[\w\.\-@:\/#+!\?%&|,;=]*$/.test(value) ? value : JSON.stringify(value);
     }
+
+    /**
+     * 当被子类重写时负责返回一个值，指示当前模块是否允许生成源映射。
+     */
+    get sourceMap() { return true; }
 
 }
 

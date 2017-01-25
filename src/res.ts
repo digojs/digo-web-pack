@@ -17,6 +17,11 @@ export class ResModule extends Module {
     readonly options: ResModuleOptions;
 
     /**
+     * 当被子类重写时负责返回当前模块的类型。
+     */
+    get type() { return this.options.type; }
+
+    /**
      * 存储当前文件的数据。
      */
     private srcData?: digo.File["data"];
