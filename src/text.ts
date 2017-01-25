@@ -615,7 +615,7 @@ export class TextModule extends Module {
             }
             foundCommand = true;
             const match = /'(.*)'|"(.*)"/.exec(args);
-            const arg = match ? match[1] : args.trim();
+            const arg = match ? match[1] || match[2] || "" : args.trim();
             const argIndex = commentIndex + matchIndex + prefix.length + (match ? match.index + 1 : 0);
             this.parseCommand(source, sourceIndex, name, arg, argIndex);
             return "";
