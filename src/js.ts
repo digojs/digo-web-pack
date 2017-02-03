@@ -71,11 +71,11 @@ export class JsModule extends TextModule {
      * 当被子类重写时负责解析当前模块。
      */
     parse() {
-        this.file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
+        this.file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|`((?:[^\\`]|\\[\s\S])*)`|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)|import|export\s*(var|let|const|function|class|interface|enum|default)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, templateString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
             // TODO: 改进异步 require 实现
 
             // "...", '...'
-            if (doubleString != undefined || singleString != undefined) {
+            if (doubleString != undefined || singleString != undefined || templateString != undefined) {
                 return "";
             }
 
@@ -101,6 +101,54 @@ export class JsModule extends TextModule {
 
             return "";
         });
+    }
+
+    /**
+     * 扫描一段空白。
+     * @param source 要解析的字符串片段。
+     * @param sourceIndex *source* 在源文件的起始位置。
+     * @return 返回扫描结束的位置。
+     */
+    protected scanWhiteSpace(source: string, sourceIndex: number) {
+        while (true) {
+            switch (source.charCodeAt(sourceIndex)) {
+                case 32/* */:
+                case 10/*\n*/:
+                case 13/*\r*/:
+                    sourceIndex++;
+                    continue;
+                default:
+                    return sourceIndex;;
+            }
+        }
+    }
+
+    /**
+     * 扫描一个字符串。
+     * @param source 要解析的字符串片段。
+     * @param sourceIndex *source* 在源文件的起始位置。
+     * @param quote 字符串的引号。
+     */
+    protected scanString(source: string, sourceIndex: number, quote: number) {
+
+    }
+
+    /**
+     * 扫描一个多行注释。
+     * @param source 要解析的字符串片段。
+     * @param sourceIndex *source* 在源文件的起始位置。
+     */
+    protected scanMultiLineComment(source: string, sourceIndex: number) {
+
+    }
+
+    /**
+     * 扫描一个单行注释。
+     * @param source 要解析的字符串片段。
+     * @param sourceIndex *source* 在源文件的起始位置。
+     */
+    protected scanSingleLineComment(source: string, sourceIndex: number) {
+
     }
 
     /**
