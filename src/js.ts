@@ -71,7 +71,8 @@ export class JsModule extends TextModule {
      * 当被子类重写时负责解析当前模块。
      */
     parse() {
-        this.file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|`((?:[^\\`]|\\[\s\S])*)`|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)|import|export\s*(var|let|const|function|class|interface|enum|default)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, templateString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
+        this.file.content.replace(/"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)'|`((?:[^\\`]|\\[\s\S])*)`|\/\/([^\n\r]*)|\/\*([\s\S]*?)(?:\*\/|$)|(\brequire\s*\(\s*)(?:"((?:[^\\"\n\r]|\\[\s\S])*)"|'((?:[^\\'\n\r]|\\[\s\S])*)')\s*\)/g, (matchSource: string, doubleString: string | undefined, singleString: string | undefined, templateString: string | undefined, singleComment: string | undefined, multiComment: string | undefined, requirePrefix: string | undefined, requireDoubleString: string | undefined, requireSingleString: string | undefined, matchIndex: number) => {
+            // |import|export\s*(var|let|const|function|class|interface|enum|default)
             // TODO: 改进异步 require 实现
 
             // "...", '...'

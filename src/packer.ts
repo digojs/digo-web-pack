@@ -2,7 +2,8 @@
  * @file 模块打包器
  * @author xuld <xuld@vip.qq.com>
  */
-import * as digo from "digo/lib";
+import * as digo from "digo";
+import * as _digo from "digo/lib";
 import { Module } from "./module";
 import { ResModule } from "./res";
 import { HtmlModule, HtmlModuleOptions } from "./html";
@@ -23,7 +24,7 @@ export class Packer {
     /**
      * 获取当前打包器的异步任务队列。
      */
-    private readonly asyncQueue = new digo.AsyncQueue();
+    private readonly asyncQueue = new (digo as typeof _digo).AsyncQueue();
 
     /**
      * 存储所有模块。
@@ -89,13 +90,13 @@ export class Packer {
                     data = new digo.FileLogEntry(sourceFile, data, args);
                 }
                 if (data.fileName === path && data.startLine != undefined) {
-                    const newStartLoc = sourceFile.indexToLocation(sourceIndex + result.locationToIndex({ line: data.startLine, column: data.startColumn || 0 }));
+                    const newStartLoc = sourceFile.indexToLocation(sourceIndex! + result.locationToIndex({ line: data.startLine, column: data.startColumn || 0 }));
                     data.startLine = newStartLoc.line;
                     if (data.startColumn != undefined) {
                         data.startColumn = newStartLoc.column;
                     }
                     if (data.endLine != undefined) {
-                        const newEndLoc = sourceFile.indexToLocation(sourceIndex + result.locationToIndex({ line: data.endLine, column: data.endColumn || 0 }));
+                        const newEndLoc = sourceFile.indexToLocation(sourceIndex! + result.locationToIndex({ line: data.endLine, column: data.endColumn || 0 }));
                         data.startLine = newEndLoc.line;
                         if (data.endColumn != undefined) {
                             data.endColumn = newEndLoc.column;
