@@ -297,7 +297,7 @@ export class TextModule extends Module {
 
             // 追加地址后缀。
             if (this.getAndRemoveQuery(urlInfo, "__append") !== "false" && !this.replaceQueryVariable(urlInfo)) {
-                const append = typeof urlOptions.append === "function" ? urlOptions.append(urlInfo, this) : urlOptions.append;
+                const append = typeof urlOptions.append === "function" ? urlOptions.append(urlInfo, this) : module ? urlOptions.append : undefined;
                 if (append) {
                     urlInfo.query += (urlInfo.query ? "&" : "?") + append;
                     this.replaceQueryVariable(urlInfo);
@@ -314,10 +314,12 @@ export class TextModule extends Module {
                     if (urlInfo.resolved) {
                         result = this.replacPrefix(urlOptions.public, digo.relativePath(urlInfo.resolved));
                     }
-                    if (result !== null && urlInfo.module && urlInfo.module.destPath != undefined && savePath != undefined) {
-                        result = digo.relativePath(digo.getDir(savePath), urlInfo.module.destPath);
-                    } else {
-                        result = urlInfo.path;
+                    if (result == null) {
+                        if (urlInfo.module && urlInfo.module.destPath != undefined && savePath != undefined) {
+                            result = digo.relativePath(digo.getDir(savePath), urlInfo.module.destPath);
+                        } else {
+                            result = urlInfo.path;
+                        }
                     }
                     result += urlInfo.query;
                 }
@@ -908,12 +910,12 @@ export interface TextModuleOptions extends ModuleOptions {
          * ```json
          * {
          *    public: {
-         *       "assets": "http://cdn.com/assets" 
+         *       "assets": "http://cdn.com/assets"
          *    }
          * }
          * ```
          */
-        public?: { [url: string]: string }
+        public?: { [url: string]: string };
 
     };
 
