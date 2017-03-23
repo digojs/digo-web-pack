@@ -24,7 +24,6 @@
     "mime-db": "latest"
   },
   "scripts": {
-    "install": "npm run build",
     "build": "npm run compile && npm run test",
     "compile": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json -w",
