@@ -47,7 +47,7 @@ export class HtmlModule extends TextModule {
 
             // <script>
             if (openScript != undefined) {
-                this.parseTag(openScript, matchIndex, "script", script + openScript.length);
+                this.parseTag(openScript, matchIndex, "script", script, matchIndex + openScript.length);
                 return "";
             }
 
@@ -470,6 +470,7 @@ const defaultTags = {
         "onwaiting": "script"
     },
     "script": {
+        "innerHTML": "script",
         "src": "script-url",
         "type": "lang",
         "lang": "lang",
@@ -482,6 +483,7 @@ const defaultTags = {
         "language": "lang"
     },
     "style": {
+        "innerHTML": "style",
         "src": "style-url",
         "type": "lang",
         "lang": "lang",
