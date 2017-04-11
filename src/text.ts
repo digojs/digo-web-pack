@@ -508,10 +508,8 @@ export class TextModule extends Module {
             if (result) {
                 return result;
             }
-        } else {
-            digo.verbose("Test: {url} => Is not a directory", { url: module });
-            return this.tryExtensions(module, extensions);
         }
+        return this.tryExtensions(module, extensions);
     }
 
     /**
@@ -568,11 +566,11 @@ export class TextModule extends Module {
                     case "now":
                         return new Date().getTime().toString();
                     case "hash":
-                        return url.module ? digo.sha1(url.module.getBuffer("")).substr(0, +postfix || 6) : "";
+                        return url.module ? digo.sha1(url.module.getBuffer("")).substr(0, +postfix! || 6) : "";
                     case "md5":
-                        return url.module ? digo.md5(url.module.getBuffer("")).substr(0, +postfix || 32) : "";
+                        return url.module ? digo.md5(url.module.getBuffer("")).substr(0, +postfix! || 32) : "";
                     case "random":
-                        return (~~(Math.random() * Math.pow(10, +postfix || 3))).toString();
+                        return (~~(Math.random() * Math.pow(10, +postfix! || 3))).toString();
                 }
                 result = true;
                 return all;
