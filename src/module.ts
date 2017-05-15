@@ -1,7 +1,3 @@
-/**
- * @file 模块
- * @author xuld <xuld@vip.qq.com>
- */
 import * as path from "path";
 import * as digo from "digo";
 import { Packer } from "./packer";
@@ -54,14 +50,14 @@ export abstract class Module {
             for (const path of this.options.imports) {
                 this.require(this.resolvePathInConfig(path), module => {
                     this.import(module!);
-                })
+                });
             }
         }
         if (this.options.excludes) {
             for (const path of this.options.excludes) {
                 this.require(this.resolvePathInConfig(path), module => {
                     this.exclude(module!);
-                })
+                });
             }
         }
     }

@@ -1,7 +1,3 @@
-/**
- * @file 资源模块
- * @author xuld <xuld@vip.qq.com>
- */
 import * as digo from "digo";
 import { Packer } from "./packer";
 import { Module, ModuleOptions } from "./module";

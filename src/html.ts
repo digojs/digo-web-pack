@@ -1,7 +1,3 @@
-/**
- * @file HTML 模块
- * @author xuld <xuld@vip.qq.com>
- */
 import * as digo from "digo";
 import { Packer } from "./packer";
 import { Module } from "./module";
@@ -329,7 +325,7 @@ export interface HtmlModuleOptions extends TextModuleOptions {
      * ```
      * #### 分别设置每个属性的解析方式
      * ```json
-     * { 
+     * {
      *      tags: {
      *          "img": {
      *              "src": false        // 不解析 <img src>
@@ -340,12 +336,12 @@ export interface HtmlModuleOptions extends TextModuleOptions {
      *          "*": {                  // * 将对所有节点生效
      *              "style": false
      *          }
-     *      } 
+     *      }
      * }
      * ```
      * #### 自定义函数
      * ```json
-     * { 
+     * {
      *      tags: function (tagName, attrName, openTag, openTagIndex, module) {
      *          return "url";
      *      }
@@ -362,7 +358,7 @@ export interface HtmlModuleOptions extends TextModuleOptions {
     /**
      * 测试是否包含服务端代码的正则表达式。
      */
-    serverCode?: RegExp,
+    serverCode?: RegExp;
 
 }
 

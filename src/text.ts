@@ -1,7 +1,3 @@
-/**
- * @file 文本模块
- * @author xuld <xuld@vip.qq.com>
- */
 import * as path from "path";
 import * as digo from "digo";
 import { Packer } from "./packer";

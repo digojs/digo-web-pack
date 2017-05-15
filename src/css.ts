@@ -1,7 +1,3 @@
-/**
- * @file CSS 模块
- * @author xuld <xuld@vip.qq.com>
- */
 import * as digo from "digo";
 import { Packer } from "./packer";
 import { Module } from "./module";
@@ -131,26 +127,26 @@ export class CssModule extends TextModule {
                 case 34/*"*/:
                     return '\"';
                 case 39/*'*/:
-                    return '\'';
+                    return "'";
                 case 92/*\*/:
-                    return '\\';
+                    return "\\";
                 case 10/*\n*/:
                 case 13/*\r*/:
-                    return '';
+                    return "";
                 case 110/*n*/:
-                    return '\n';
+                    return "\n";
                 case 114/*r*/:
-                    return '\r';
+                    return "\r";
                 case 118/*v*/:
-                    return '\v';
+                    return "\v";
                 case 116/*t*/:
-                    return '\t';
+                    return "\t";
                 case 98/*b*/:
-                    return '\b';
+                    return "\b";
                 case 102/*f*/:
-                    return '\f';
+                    return "\f";
                 case 48/*0*/:
-                    return '\0';
+                    return "\0";
                 default:
                     return word;
             }
@@ -164,7 +160,7 @@ export class CssModule extends TextModule {
      * @returns 返回处理后的字符串。
      */
     protected encodeString(value: string, quote: string) {
-        if (quote.charCodeAt(0) === 34/*"*/ || quote.charCodeAt(0) === 39/*'*/) {
+        if (quote.charCodeAt(0) === 34 /*"*/ || quote.charCodeAt(0) === 39 /*'*/) {
             return JSON.stringify(value).slice(1, -1).replace(/'/g, "\\'");
         }
         return /^[\w\.\-@:\/#+!\?%&|,;=]*$/.test(value) ? value : JSON.stringify(value);

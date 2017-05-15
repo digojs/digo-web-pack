@@ -1,7 +1,3 @@
-/**
- * @file 模块打包器
- * @author xuld <xuld@vip.qq.com>
- */
 import * as digo from "digo";
 import * as _digo from "digo/lib";
 import { Module } from "./module";
@@ -193,7 +189,7 @@ export class Packer {
      */
     build(result: digo.FileList) {
 
-        // 等待入口文件全部加载。  
+        // 等待入口文件全部加载。
         this.asyncQueue.enqueue(() => {
 
             // 标记所有入口文件已添加。
@@ -332,7 +328,7 @@ export class Packer {
      */
     getMimeTypeByExt(ext: string | undefined) {
         ext = ext || "";
-        return this.mimeTypes[ext.toLowerCase()] || "application/" + ext.replace('.', "");
+        return this.mimeTypes[ext.toLowerCase()] || "application/" + ext.replace(".", "");
     }
 
     /**

@@ -1,7 +1,3 @@
-/**
- * @file JS 模块
- * @author xuld <xuld@vip.qq.com>
- */
 import * as path from "path";
 import * as digo from "digo";
 import { Packer } from "./packer";
@@ -119,7 +115,7 @@ export class JsModule extends TextModule {
                     sourceIndex++;
                     continue;
                 default:
-                    return sourceIndex;;
+                    return sourceIndex;
             }
         }
     }
@@ -201,26 +197,26 @@ export class JsModule extends TextModule {
                 case 34/*"*/:
                     return '\"';
                 case 39/*'*/:
-                    return '\'';
+                    return "'";
                 case 92/*\*/:
-                    return '\\';
+                    return "\\";
                 case 10/*\n*/:
                 case 13/*\r*/:
-                    return '';
+                    return "";
                 case 110/*n*/:
-                    return '\n';
+                    return "\n";
                 case 114/*r*/:
-                    return '\r';
+                    return "\r";
                 case 118/*v*/:
-                    return '\v';
+                    return "\v";
                 case 116/*t*/:
-                    return '\t';
+                    return "\t";
                 case 98/*b*/:
-                    return '\b';
+                    return "\b";
                 case 102/*f*/:
-                    return '\f';
+                    return "\f";
                 case 48/*0*/:
-                    return '\0';
+                    return "\0";
                 case 117/*u*/:
                 case 120/*x*/:
                     return String.fromCharCode(parseInt(/\}$/.test(word) ? word.slice(2, -1) : word.slice(1), 16));
@@ -339,7 +335,7 @@ export class JsModule extends TextModule {
      * @param extracts 导出的所有文件。
      */
     protected writeModule(writer: digo.Writer, module: Module, savePath: string | undefined, modules: Module[], extracts: digo.File[]) {
-        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module))}, function (require, exports, module) {\n`)
+        writer.write(`digo.define(${JSON.stringify(this.getModuleName(module))}, function (require, exports, module) {\n`);
         writer.indent();
         if (module.type === "js") {
             super.writeModule(writer, module, savePath, modules, extracts);
