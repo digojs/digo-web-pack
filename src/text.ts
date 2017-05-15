@@ -25,7 +25,7 @@ export class TextModule extends Module {
     /**
      * 获取当前模块的源映射。
      */
-    protected readonly sourceMapData: digo.File["sourceMapData"];
+    protected readonly sourceMapBuilder: digo.SourceMapBuilder;
 
     /**
      * 当被子类重写时负责返回当前模块的类型。
@@ -41,7 +41,7 @@ export class TextModule extends Module {
     constructor(packer: Packer, file: digo.File, options?: TextModuleOptions) {
         super(packer, file, options);
         this.sourceContent = this.file.content;
-        this.sourceMapData = this.file.sourceMapData;
+        this.sourceMapBuilder = this.file.sourceMapBuilder!;
     }
 
     /**
@@ -64,8 +64,7 @@ export class TextModule extends Module {
      */
     protected hasChange(source: string, sourceIndex: number) {
         // FIXME: 是否需要改进为二分搜索?
-        for (let i = 0; i < this.changes.length; i++) {
-            const change = this.changes[i];
+        for (const change of this.changes) {
             if (change.endIndex <= sourceIndex) {
                 continue;
             }
@@ -182,7 +181,7 @@ export class TextModule extends Module {
      */
     private writeContent(writer: digo.Writer, savePath: string | undefined) {
         if (!this.changes || this.changes.length === 0) {
-            writer.write(this.sourceContent, 0, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
+            writer.write(this.sourceContent, 0, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapBuilder);
             return;
         }
 
@@ -191,7 +190,7 @@ export class TextModule extends Module {
 
             // 写入上一次替换到这次更新记录中间的普通文本。
             if (p < change.startIndex) {
-                writer.write(this.sourceContent, p, change.startIndex, this.srcPath, 0, 0, this.sourceMapData);
+                writer.write(this.sourceContent, p, change.startIndex, this.srcPath, 0, 0, this.sourceMapBuilder);
             }
 
             // 写入替换的数据。
@@ -207,7 +206,7 @@ export class TextModule extends Module {
 
         // 输出最后一段文本。
         if (p < this.sourceContent.length) {
-            writer.write(this.sourceContent, p, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapData);
+            writer.write(this.sourceContent, p, this.sourceContent.length, this.srcPath, 0, 0, this.sourceMapBuilder);
         }
     }
 
@@ -519,8 +518,8 @@ export class TextModule extends Module {
      * @returns 如果存在则返回添加扩展名的路径。
      */
     private tryExtensions(module: string, extensions: string[]) {
-        for (let i = 0; i < extensions.length; i++) {
-            const result = module + extensions[i];
+        for (const extension of extensions) {
+            const result = module + extension;
             if (this.existsFile(result)) {
                 digo.verbose("Test: {path} => Found, resolve completed", { path: result });
                 return result;
@@ -808,7 +807,7 @@ export interface TextModuleOptions extends ModuleOptions {
 
         /**
          * 路径别名列表。
-         * @example 
+         * @example
          * ```json
          * {
          *      alias: {
