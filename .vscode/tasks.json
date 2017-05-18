@@ -1,0 +1,29 @@
+{
+    "version": "0.1.0",
+    "command": "npm",
+    "args": [
+        "run"
+    ],
+    "isShellCommand": true,
+    "tasks": [
+        {
+            "taskName": "build",
+            "isBuildCommand": true,
+            "problemMatcher": "$tsc"
+        },
+        {
+            "taskName": "watch",
+            "isBackground": true,
+            "problemMatcher": "$tsc"
+        },
+        {
+            "taskName": "test",
+            "isTestCommand": true,
+            "problemMatcher": "$tsc"
+        },
+        {
+            "taskName": "compile",
+            "problemMatcher": "$tsc"
+        }
+    ]
+}
