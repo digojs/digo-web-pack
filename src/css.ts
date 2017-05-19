@@ -124,28 +124,28 @@ export class CssModule extends TextModule {
                 return String.fromCharCode(parseInt(unicode, 16));
             }
             switch (word.charCodeAt(0)) {
-                case 34/*"*/:
+                case 34 /*"*/:
                     return '\"';
-                case 39/*'*/:
+                case 39 /*'*/:
                     return "'";
-                case 92/*\*/:
+                case 92 /*\*/:
                     return "\\";
-                case 10/*\n*/:
-                case 13/*\r*/:
+                case 10 /*\n*/:
+                case 13 /*\r*/:
                     return "";
-                case 110/*n*/:
+                case 110 /*n*/:
                     return "\n";
-                case 114/*r*/:
+                case 114 /*r*/:
                     return "\r";
-                case 118/*v*/:
+                case 118 /*v*/:
                     return "\v";
-                case 116/*t*/:
+                case 116 /*t*/:
                     return "\t";
-                case 98/*b*/:
+                case 98 /*b*/:
                     return "\b";
-                case 102/*f*/:
+                case 102 /*f*/:
                     return "\f";
-                case 48/*0*/:
+                case 48 /*0*/:
                     return "\0";
                 default:
                     return word;

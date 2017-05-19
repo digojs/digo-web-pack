@@ -130,26 +130,26 @@ export abstract class Module {
     // #region 依赖
 
     /**
-     * 获取当前模块直接包含的所有模块。
+     * 当前模块直接包含的所有模块。
      */
-    protected includes: Module[] = [];
+    includes: Module[] = [];
 
     /**
-     * 获取当前模块直接导入的所有模块。
+     * 当前模块直接导入的所有模块。
      */
-    protected imports: Module[] = [];
+    imports: Module[] = [];
 
     /**
-     * 获取当前模块直接排除的所有模块。
+     * 当前模块直接排除的所有模块。
      */
-    protected excludes: Module[] = [];
+    excludes: Module[] = [];
 
     /**
      * 判断当前模块及子模块是否已包含了目标模块。
      * @param module 要包含的模块。
      * @return 如果已包含则返回 true，否则返回 false。
      */
-    private hasInclude(module: Module) {
+    hasInclude(module: Module) {
         if (module == this) {
             return true;
         }
@@ -166,7 +166,7 @@ export abstract class Module {
      * @param module 要包含的模块。
      * @return 如果已成功包含则返回 true，否则表示存在循环包含，返回 false。
      */
-    protected include(module: Module) {
+    include(module: Module) {
         if (module.hasInclude(this)) {
             return false;
         }
@@ -183,7 +183,7 @@ export abstract class Module {
      * 导入一个模块。
      * @param module 要导入的模块。
      */
-    protected import(module: Module) {
+    import(module: Module) {
         if (module == this) {
             return;
         }
@@ -199,7 +199,7 @@ export abstract class Module {
      * 排除一个模块。
      * @param module 要导入的模块。
      */
-    protected exclude(module: Module) {
+    exclude(module: Module) {
         if (module == this) {
             return;
         }
@@ -209,6 +209,21 @@ export abstract class Module {
                 source: "WebPack:exclude"
             });
         }
+    }
+
+    /**
+     * 获取最终的文件依赖列表。
+     * @return 返回模块列表。列表的顺序表示模块的依赖顺序。
+     */
+    buildModuleList() {
+        const imports: Module[] = [];
+        const excludes: Module[] = [];
+        this.addImportsTo(imports, []);
+        this.addExcludesTo(excludes, [this]);
+        if (excludes.length) {
+            return imports.filter(module => excludes.indexOf(module) < 0);
+        }
+        return imports;
     }
 
     /**
@@ -241,21 +256,6 @@ export abstract class Module {
             module.addImportsTo(result, processed);
             module.addExcludesTo(result, processed);
         }
-    }
-
-    /**
-     * 获取最终的文件依赖列表。
-     * @return 返回模块列表。列表的顺序表示模块的依赖顺序。
-     */
-    protected getModuleList() {
-        const imports: Module[] = [];
-        const excludes: Module[] = [];
-        this.addImportsTo(imports, []);
-        this.addExcludesTo(excludes, [this]);
-        if (excludes.length) {
-            return imports.filter(module => excludes.indexOf(module) < 0);
-        }
-        return imports;
     }
 
     // #endregion

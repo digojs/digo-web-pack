@@ -111,8 +111,8 @@ export class TextModule extends Module {
      */
     save(file: digo.File, result?: digo.FileList) {
         this.resolve();
-        const modules = this.getModuleList();
-        const extracts = [];
+        const modules = this.buildModuleList();
+        const extracts: digo.File[] = [];
         const writer = file.createWriter({
             sourceMap: this.sourceMap === false ? false : this.options.output && this.options.output.sourceMap,
             indentChar: this.options.output && this.options.output.indentChar
@@ -1110,6 +1110,6 @@ export interface Change {
 
 }
 
-const defaultExtensions = ["", ".json", ".js"];
-const defaultPackageMains = ["main"];
-const defaultModulesDirectories = [];
+const defaultExtensions: string[] = ["", ".json", ".js"];
+const defaultPackageMains: string[] = ["main"];
+const defaultModulesDirectories: string[] = [];

@@ -213,10 +213,10 @@ export class HtmlModule extends TextModule {
         const tagsOption = this.options.tags;
         if (typeof tagsOption === "object") {
             if (typeof tagsOption[tagName] === "object") {
-                result = tagsOption[tagName][attrName];
+                result = (tagsOption[tagName] as any)[attrName];
             }
             if (result == undefined && typeof tagsOption["*"] === "object") {
-                result = tagsOption["*"][attrName];
+                result = (tagsOption["*"] as any)[attrName];
             }
         } else if (typeof tagsOption === "function") {
             result = tagsOption(tagName, attrName, source, sourceIndex, this);
@@ -262,12 +262,12 @@ export class HtmlModule extends TextModule {
      * @example decodeHTML("<a></a>") // "&lt;a&gt;&lt;/a&gt;"
      */
     protected decodeHTML(value: string) {
-        return value.replace(/&(#(\d{1,4})|amp|lt|gt|quot);/g, (_, word: string, unicode: string) => unicode ? String.fromCharCode(+unicode) : {
+        return value.replace(/&(#(\d{1,4})|amp|lt|gt|quot);/g, (_, word: string, unicode: string) => unicode ? String.fromCharCode(+unicode) : ({
             amp: "&",
             lt: "<",
             gt: ">",
             quot: '\"'
-        }[word]);
+        } as any)[word]);
     }
 
     /**
@@ -276,7 +276,7 @@ export class HtmlModule extends TextModule {
      * @param quote 优先使用的引号。
      * @return 返回已格式化的属性字符串。
      */
-    protected formatAttrValue(value: string, quote: string) {
+    protected formatAttrValue(value: string, quote: string): string {
         switch (quote.charCodeAt(0)) {
             case 34/*"*/:
                 return value.replace(/"/g, "&quot;");
@@ -367,7 +367,7 @@ export interface HtmlModuleOptions extends TextModuleOptions {
  */
 export type AttrType = void | boolean | "url" | "urlset" | "style" | "script" | "lang" | "script-url" | "style-url";
 
-const defaultTags = {
+const defaultTags: { [tagName: string]: { [propName: string]: AttrType } } = {
     "*": {
         "src": "url",
         "data-src": "url",
@@ -502,7 +502,7 @@ const defaultTags = {
     },
 };
 
-const defaultLangs = {
+const defaultLangs: { [mimeType: string]: string } = {
     "script": ".js",
     "style": ".css",
     "template": ".inc",
