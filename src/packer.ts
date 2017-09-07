@@ -176,6 +176,17 @@ export class Packer {
     }
 
     /**
+     * 如果未设置指定文件对应的模块。
+     * @param file 要设置的文件。
+     * @param module 要设置的模块。
+     */
+    setModuleIf(file: digo.File, module: Module) {
+        if (!this.getModule(file)) {
+            this.setModule(file, module);
+        }
+    }
+
+    /**
      * 获取指定路径对应的模块。
      * @param path 要获取的绝对路径。
      * @return 返回模块对象。
@@ -256,19 +267,19 @@ export class Packer {
                 return new HtmlModule(this, file);
             case ".json":
             case ".map":
-                return new ResModule(this, file, "json");
+                return new ResModule(this, file, { type: "json" });
             case ".xml":
             case ".config":
-                return new ResModule(this, file, "xml");
+                return new ResModule(this, file, { type: "xml" });
             case ".svg":
-                return new ResModule(this, file, "svg");
+                return new ResModule(this, file, { type: "svg" });
             case ".tif":
             case ".tiff":
             case ".woff":
             case ".woff2":
             case ".ttf":
             case ".eot":
-                return new ResModule(this, file, "font");
+                return new ResModule(this, file, { type: "font" });
             case ".wbmp":
             case ".png":
             case ".bmp":
@@ -279,19 +290,19 @@ export class Packer {
             case ".jpe":
             case ".jpeg":
             case ".jpg":
-                return new ResModule(this, file, "image");
+                return new ResModule(this, file, { type: "image" });
             case ".swf":
-                return new ResModule(this, file, "flash");
+                return new ResModule(this, file, { type: "flash" });
             case ".txt":
             case ".text":
             case ".md":
             case ".log":
             case ".tpl":
             case ".template":
-                return new ResModule(this, file, "text");
+                return new ResModule(this, file, { type: "text" });
             default:
                 const mimeType = this.getMimeTypeByExt(file.ext);
-                return new ResModule(this, file, /^image/.test(mimeType) ? "image" : /^application\/font/.test(mimeType) ? "font" : mimeType.replace(/\/.*$/, ""));
+                return new ResModule(this, file, { type: /^image/.test(mimeType) ? "image" : /^application\/font/.test(mimeType) ? "font" : mimeType.replace(/\/.*$/, "") });
         }
     }
 
@@ -353,7 +364,7 @@ export class Packer {
         name: "WebPack:RES",
         load: false,
         add: (file: digo.File, type: string) => {
-            this.setModule(file, new ResModule(this, file, type));
+            this.setModuleIf(file, new ResModule(this, file, { type: type }));
         }
     };
 
@@ -364,7 +375,7 @@ export class Packer {
         name: "WebPack:TEXT",
         load: true,
         add: (file: digo.File, options: TextModuleOptions) => {
-            this.setModule(file, new TextModule(this, file, options));
+            this.setModuleIf(file, new TextModule(this, file, options));
         }
     };
 
@@ -375,7 +386,7 @@ export class Packer {
         name: "WebPack:HTML",
         load: true,
         add: (file: digo.File, options: HtmlModuleOptions) => {
-            this.setModule(file, new HtmlModule(this, file, options));
+            this.setModuleIf(file, new HtmlModule(this, file, options));
         }
     };
 
@@ -386,7 +397,7 @@ export class Packer {
         name: "WebPack:CSS",
         load: true,
         add: (file: digo.File, options: CssModuleOptions) => {
-            this.setModule(file, new CssModule(this, file, options));
+            this.setModuleIf(file, new CssModule(this, file, options));
         }
     };
 
@@ -397,7 +408,7 @@ export class Packer {
         name: "WebPack:JS",
         load: true,
         add: (file: digo.File, options: JsModuleOptions) => {
-            this.setModule(file, new JsModule(this, file, options));
+            this.setModuleIf(file, new JsModule(this, file, options));
         }
     };
 

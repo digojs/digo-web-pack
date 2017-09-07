@@ -29,7 +29,7 @@ export class ResModule extends Module {
      * @param type 当前模块的类型。
      */
     constructor(packer: Packer, file: digo.File, options?: ResModuleOptions) {
-        super(packer, file, undefined);
+        super(packer, file, options);
         if (this.file.loaded) {
             this.srcData = this.file.data;
         }

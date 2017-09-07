@@ -172,7 +172,7 @@ export abstract class Module {
         }
         this.includes.push(module);
         if (module.srcPath) {
-            this.file.dep(module.srcPath, {
+            this.file && this.file.dep(module.srcPath, {
                 source: "WebPack:include"
             });
         }
@@ -189,7 +189,7 @@ export abstract class Module {
         }
         this.imports.push(module);
         if (module.srcPath) {
-            this.file.dep(module.srcPath, {
+            this.file && this.file.dep(module.srcPath, {
                 source: "WebPack:import"
             });
         }
@@ -219,7 +219,7 @@ export abstract class Module {
         const imports: Module[] = [];
         const excludes: Module[] = [];
         this.addImportsTo(imports, []);
-        this.addExcludesTo(excludes, [this]);
+        this.addExcludesTo(excludes, []);
         if (excludes.length) {
             return imports.filter(module => excludes.indexOf(module) < 0);
         }

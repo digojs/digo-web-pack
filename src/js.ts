@@ -4,6 +4,7 @@ import { Packer } from "./packer";
 import { Module, emptyObject } from "./module";
 import { TextModule, TextModuleOptions, UrlType, UrlInfo } from "./text";
 import { CssModule } from "./css";
+import { ResModule } from "./res";
 
 /**
  * 表示一个 JS 模块。
@@ -179,7 +180,7 @@ export class JsModule extends TextModule {
         if (name === "config") {
             const kv = /(loader|commonjs|module|exports|extractCss)\s+(\w*)/.exec(arg);
             if (kv) {
-                this[kv[1]] = kv[1] === "loader" || kv[1] === "commonjs" ? kv[2] !== "false" : kv[2];
+                this[kv[1] as keyof this] = kv[1] === "loader" || kv[1] === "commonjs" ? kv[2] !== "false" : kv[2];
             }
         } else {
             super.parseCommand(source, sourceIndex, name, arg, argIndex);
@@ -258,22 +259,23 @@ export class JsModule extends TextModule {
             for (let i = 0; i < modules.length; i++) {
                 if (modules[i] instanceof CssModule) {
                     cssModules.push(modules[i] as CssModule);
-                    modules.splice(i--, 1);
+                    modules[i] = Object.defineProperty(Object.create(modules[i]), "type", { value: "extractCss" });
                 }
             }
             if (cssModules.length) {
                 const cssPath = savePath != undefined ? path.resolve(savePath, "..", requireOptions.extractCss === true ? "__name.css" : requireOptions.extractCss).replace("__name", digo.getFileName(savePath, false)) : undefined;
-                const cssFile = new digo.File(cssPath);
-                const cssWriter = cssFile.createWriter(this.options.output);
-                if (cssPath != undefined) {
-                    const existsModule = this.packer.findModule(cssPath);
-                    if (existsModule instanceof CssModule) {
-                        cssModules.push(existsModule);
+                const existsModule = cssPath != undefined && this.packer.findModule(cssPath);
+                if (existsModule) {
+                    for (const module of cssModules) {
+                        existsModule.import(module);
                     }
+                } else {
+                    const cssFile = new digo.File(cssPath);
+                    const cssWriter = cssFile.createWriter(this.options.output);
+                    cssModules[cssModules.length - 1].write(cssWriter, cssPath, cssModules, []);
+                    cssWriter.end();
+                    extracts.push(cssFile);
                 }
-                cssModules[cssModules.length - 1].write(cssWriter, cssPath, cssModules, []);
-                cssWriter.end();
-                extracts.push(cssFile);
             }
         }
         const loader = this.loader != undefined ? this.loader : requireOptions.loader != undefined ? requireOptions.loader : !this.excludes.length;
@@ -345,7 +347,7 @@ export class JsModule extends TextModule {
             writer.write(`module.exports = ${JSON.stringify(module.getContent(savePath))};`);
         } else if (module.type === "json") {
             writer.write(`module.exports = ${module.getContent(savePath)};`);
-        } else {
+        } else if (module.type !== "extractCss") {
             writer.write(`module.exports = ${JSON.stringify(module.getContent(savePath))};`);
         }
         writer.unindent();

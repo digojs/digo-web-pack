@@ -56,10 +56,10 @@ describe("css", function () {
     });
 
     it("url-import", function () {
-        assert.equal(buildCss('@import url("body.css"); .sel { line-height: 10px; }'), 'body { color: red }\n\n .sel { line-height: 10px; }');
+        assert.equal(buildCss('@import url("body.css"); .sel { line-height: 10px; }'), 'body { color: red }\n\n.sel { line-height: 10px; }');
         assert.equal(buildCss('@import url("body.css?__inline=false"); .sel { line-height: 10px; }'), '@import url("body.css"); .sel { line-height: 10px; }');
         assert.equal(buildCss('@import url("body.css?__inline=1"); .sel { line-height: 10px; }'), '@import url("body.css"); .sel { line-height: 10px; }');
-        assert.equal(buildCss('@import url("body.css?__inline=100000"); .sel { line-height: 10px; }'), 'body { color: red }\n\n .sel { line-height: 10px; }');
+        assert.equal(buildCss('@import url("body.css?__inline=100000"); .sel { line-height: 10px; }'), 'body { color: red }\n\n.sel { line-height: 10px; }');
     });
 
 });
@@ -77,14 +77,18 @@ describe("js", function () {
 
 digo.define("main.js", function (require, exports, module) {
 \trequire("body.js");
-});`);
+});
+
+var exports = digo.require("main.js");`);
         assert.equal(buildJs('require("./body.css");'), `digo.define("body.css", function (require, exports, module) {
 \tmodule.exports = digo.style("body { color: red }");
 });
 
 digo.define("main.js", function (require, exports, module) {
 \trequire("body.css");
-});`);
+});
+
+var exports = digo.require("main.js");`);
     });
 
 });
