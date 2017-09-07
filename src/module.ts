@@ -38,6 +38,8 @@ export abstract class Module {
         if (this.options.excludes) {
             for (const path of this.options.excludes) {
                 this.require(this.resolvePathInConfig(path), module => {
+                    // FIXME: 强制标记为 commonjs 模块以便该模块包含 loader。
+                    (module as any).commonjs = true;
                     this.exclude(module!);
                 });
             }
