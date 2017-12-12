@@ -161,9 +161,11 @@ export class JsModule extends TextModule {
         this.commonjs = true;
         const urlInfo = this.resolveUrl(arg, argIndex, url, "node");
         if (urlInfo.resolved) {
-            this.require(urlInfo.resolved, (module: Module) => {
-                this.import(module);
-                this.addChange(arg, argIndex, this.encodeString(this.getModuleName(module)));
+            this.require(urlInfo.resolved, (module: Module | undefined) => {
+                if (module) {
+                    this.import(module);
+                    this.addChange(arg, argIndex, this.encodeString(this.getModuleName(module)));
+                }
             });
         }
     }
@@ -254,6 +256,7 @@ export class JsModule extends TextModule {
             return;
         }
         const requireOptions = this.options.require || emptyObject!;
+        const module = requireOptions.module || "var";
         if (requireOptions.extractCss) {
             const cssModules: CssModule[] = [];
             for (let i = 0; i < modules.length; i++) {
@@ -278,6 +281,11 @@ export class JsModule extends TextModule {
                 }
             }
         }
+
+        if (module === "umd") {
+            writer.write(`(function (digo) {\n`);
+            writer.indent();
+        }
         const loader = this.loader != undefined ? this.loader : requireOptions.loader != undefined ? requireOptions.loader : !this.excludes.length;
         if (loader === true) {
             writer.write(this.getLoader());
@@ -295,7 +303,6 @@ export class JsModule extends TextModule {
         }
         super.write(writer, savePath, modules, extracts);
         const modulePath = this.getModuleName(this);
-        const module = requireOptions.module || "var";
         switch (module) {
             case "var":
                 writer.write(`\n\nvar ${requireOptions.exports || "exports"} = digo.require(${JSON.stringify(modulePath)});`);
@@ -313,17 +320,9 @@ export class JsModule extends TextModule {
                 writer.write(`\n\ndefine(function() { return digo.require(${JSON.stringify(modulePath)}); });`);
                 break;
             case "umd":
-                writer.write(`(function (root, factory) {
-    if (typeof module === 'object' && module.exports) {
-        module.exports = factory();
-    } else if (typeof define === 'function' && define.amd) {
-        define(factory);
-    } else {
-        root[${JSON.stringify(requireOptions.exports || "exports")}] = factory();
-    }
-}(this, function factory() {
-    return digo.require(${JSON.stringify(modulePath)}); });;
-}));`);
+                writer.write(`\n\ndigo.require(${JSON.stringify(modulePath)});`);
+                writer.unindent();
+                writer.write(`\n})();`);
                 break;
         }
     }
