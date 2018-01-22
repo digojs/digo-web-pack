@@ -210,7 +210,7 @@ export class Packer {
 
             // 解析每个入口模块的依赖，并递归解析。
             for (const file of this.files) {
-                this.getModule(file).ensure();
+                this.getModule(file) && this.getModule(file).ensure();
             }
         });
 
@@ -220,7 +220,7 @@ export class Packer {
             // 此时所有需要处理的模块都已加载，对入口文件逐一生成。
             for (let i = 0; i < this.files.length; i++) {
                 const file = this.files[i];
-                this.getModule(file).save(file, result);
+                this.getModule(file) && this.getModule(file).save(file, result);
                 this.callbacks[i]();
             }
 
